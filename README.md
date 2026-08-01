@@ -29,3 +29,26 @@ npm --prefix web-dashboard run lint
 npm --prefix web-dashboard run test
 npm --prefix web-dashboard run build
 ```
+
+## Validation
+
+Run every local quality check from the repository root:
+
+```sh
+make check
+```
+
+Run one area at a time:
+
+```sh
+make backend-check
+make web-check
+```
+
+`backend-check` runs Maven Wrapper verification, including Java formatting enforcement. `web-check` runs `npm ci`, Prettier format checking, ESLint, Vitest in non-watch mode, and the Vite production build. GitHub Actions runs these same targets with Maven and npm caches.
+
+Remove generated build outputs with:
+
+```sh
+make clean
+```

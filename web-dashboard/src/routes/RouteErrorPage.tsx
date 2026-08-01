@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Link } from 'react-router-dom';
 
 export function RouteErrorPage() {
   return (
@@ -8,5 +8,5 @@ export function RouteErrorPage() {
       <p role="alert">The requested dashboard route could not be displayed.</p>
       <Link to="/dashboard">Return to Dashboard</Link>
     </main>
-  )
+  );
 }

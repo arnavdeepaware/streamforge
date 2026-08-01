@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet } from 'react-router-dom';
 
 const navigationItems = [
   { label: 'Dashboard', to: '/dashboard' },
@@ -7,7 +7,7 @@ const navigationItems = [
   { label: 'Schema Registry', to: '/schema-registry' },
   { label: 'Stream Inspector', to: '/stream-inspector' },
   { label: 'Dead-Letter Events', to: '/dead-letter-events' },
-]
+];
 
 export function AppShell() {
   return (
@@ -32,5 +32,5 @@ export function AppShell() {
         <Outlet />
       </main>
     </div>
-  )
+  );
 }
