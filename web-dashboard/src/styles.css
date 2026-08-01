@@ -1,0 +1,140 @@
+:root {
+  color: #18201b;
+  background: #f5f1e7;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+}
+
+a {
+  color: inherit;
+}
+
+a:focus-visible {
+  outline: 3px solid #d15c2d;
+  outline-offset: 3px;
+}
+
+.app-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(14rem, 18rem) minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
+}
+
+.app-header {
+  background: #173d32;
+  color: #fbf7ee;
+  grid-column: 1 / -1;
+  padding: 1.5rem clamp(1.5rem, 4vw, 4rem);
+}
+
+.app-header h1,
+.placeholder-page h2,
+.placeholder-page h1 {
+  margin: 0;
+}
+
+.eyebrow {
+  color: #c9683c;
+  font-family: 'Courier New', monospace;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  margin: 0 0 0.5rem;
+  text-transform: uppercase;
+}
+
+.app-header .eyebrow {
+  color: #f4ba7a;
+}
+
+.app-navigation {
+  background: #e6ddca;
+  border-right: 1px solid #baad96;
+  padding: 1.5rem;
+}
+
+.app-navigation ul {
+  display: grid;
+  gap: 0.35rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.app-navigation a {
+  display: block;
+  padding: 0.55rem 0.7rem;
+  text-decoration: none;
+}
+
+.app-navigation a[aria-current='page'] {
+  background: #173d32;
+  color: #fffaf1;
+}
+
+.placeholder-page {
+  border: 1px solid #baad96;
+  box-shadow: 8px 8px 0 #d6c9b0;
+  margin: clamp(1.5rem, 5vw, 5rem);
+  max-width: 44rem;
+  padding: clamp(1.5rem, 4vw, 3rem);
+}
+
+.placeholder-page h2,
+.placeholder-page h1 {
+  font-size: clamp(2rem, 5vw, 4.5rem);
+  line-height: 0.95;
+}
+
+.placeholder-page p:not(.eyebrow) {
+  font-size: 1.1rem;
+  line-height: 1.6;
+  max-width: 42rem;
+}
+
+.status-message {
+  border-left: 4px solid #c9683c;
+  padding-left: 1rem;
+}
+
+.skip-link {
+  background: #fffaf1;
+  color: #173d32;
+  left: 1rem;
+  padding: 0.75rem 1rem;
+  position: fixed;
+  top: -5rem;
+  z-index: 1;
+}
+
+.skip-link:focus {
+  top: 1rem;
+}
+
+@media (max-width: 720px) {
+  .app-shell {
+    display: block;
+  }
+
+  .app-navigation {
+    border-bottom: 1px solid #baad96;
+    border-right: 0;
+    overflow-x: auto;
+  }
+
+  .app-navigation ul {
+    display: flex;
+    min-width: max-content;
+  }
+}
