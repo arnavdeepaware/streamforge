@@ -1,0 +1,26 @@
+# Operating systems and editors
+.DS_Store
+.idea/
+.vscode/
+*.iml
+*.swp
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+AGENTS.md
+
+# Java and Maven
+target/
+*.class
+
+# Node.js
+node_modules/
+dist/
+coverage/
+
+# Logs and temporary files
+*.log
+tmp/
+*.tmp
