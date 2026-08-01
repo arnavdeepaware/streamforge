@@ -1,6 +1,6 @@
 # StreamForge Architecture
 
-StreamForge is currently documentation and directory scaffolding. This document describes the accepted target architecture; it does not claim that the components below have been implemented.
+StreamForge currently has a Java 21 Maven build skeleton and documentation. This document describes the accepted target architecture; it does not claim that the components below have been implemented.
 
 ## Architectural Principles
 

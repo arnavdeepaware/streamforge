@@ -16,7 +16,7 @@ The core MVP will run as a local, single-node pipeline. It will ingest simulated
 
 Later phases may add a PostgreSQL-backed control plane, a React dashboard, WebSocket delivery, Kafka-compatible streaming, optional Redis-backed ephemeral state, and distributed workers.
 
-The current repository contains only documentation and directory scaffolding. None of the MVP behavior is implemented yet.
+The current repository contains documentation and a Java 21 Maven build skeleton. None of the MVP behavior is implemented yet.
 
 ## Non-Goals
 

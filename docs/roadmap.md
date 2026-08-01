@@ -1,6 +1,6 @@
 # StreamForge Roadmap
 
-StreamForge currently contains documentation and directory scaffolding only. The phases below describe intended delivery order, not implemented features.
+StreamForge currently contains documentation plus a Java 21 Maven build skeleton. The phases below describe intended delivery order, not implemented features.
 
 ## Phase 1: Parser Foundation
 
