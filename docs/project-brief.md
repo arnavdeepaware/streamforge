@@ -12,7 +12,9 @@ Market-data systems receive events in incompatible wire and file formats. Teams 
 
 ## MVP Boundary
 
-The MVP will ingest simulated binary tick data, CSV, and JSONL; normalize every event through a canonical model; apply safe declarative transformations; and emit JSONL, CSV, Parquet, WebSocket, or Kafka output. It will preserve nanosecond timestamps, sequence numbers, and exact fixed-point financial values across the pipeline.
+The core MVP will run as a local, single-node pipeline. It will ingest simulated binary tick data, CSV, and JSONL; retain raw input for debugging and later replay; normalize every valid event through a canonical model; apply safe declarative transformations; and emit JSONL, CSV, or Parquet. It will preserve nanosecond timestamps, source sequence numbers, and exact fixed-point financial values across the pipeline and expose Prometheus-compatible metrics.
+
+Later phases may add a PostgreSQL-backed control plane, a React dashboard, WebSocket delivery, Kafka-compatible streaming, optional Redis-backed ephemeral state, and distributed workers.
 
 The current repository contains only documentation and directory scaffolding. None of the MVP behavior is implemented yet.
 
@@ -21,4 +23,4 @@ The current repository contains only documentation and directory scaffolding. No
 - Connecting directly to live exchanges or acting as a production trading gateway.
 - Executing arbitrary user-provided JavaScript or expressions.
 - Providing order management, strategy execution, portfolio accounting, or trade settlement.
-- Delivering live metrics, replay controls, dead-letter handling, or order-book reconstruction in the initial MVP.
+- Delivering a remote control plane, dashboard, WebSocket or Kafka integration, replay controls, distributed dead-letter handling, or order-book reconstruction in the core MVP.
