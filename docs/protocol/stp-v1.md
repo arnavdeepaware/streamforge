@@ -1,6 +1,6 @@
 # Simple Tick Protocol Version 1
 
-Status: Accepted specification; no STP encoder or decoder is implemented yet.
+Status: Accepted specification; the Java encoder and one-frame decoder are implemented in the backend `stp-protocol` module.
 
 ## Purpose
 

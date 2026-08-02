@@ -1,6 +1,6 @@
 # STP v1 Golden Vectors
 
-These fixtures independently describe complete [Simple Tick Protocol v1](../../docs/protocol/stp-v1.md) frames for future codec tests. No STP codec is implemented yet.
+These fixtures independently describe complete [Simple Tick Protocol v1](../../docs/protocol/stp-v1.md) frames and are exercised by the backend `stp-protocol` codec tests.
 
 All multi-byte values use network byte order. The two-byte unsigned length excludes itself and includes the one-byte message type plus payload. Offsets are zero-based and inclusive.
 

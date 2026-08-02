@@ -1,7 +1,7 @@
 package io.streamforge.stp.protocol;
 
 /** A validated known STP v1 message. */
-public sealed interface StpMessage
+public sealed interface StpMessage extends StpDecodeResult
     permits AddOrderMessage, ExecuteOrderMessage, CancelOrderMessage, TradeMessage {
 
   FrameHeader header();
