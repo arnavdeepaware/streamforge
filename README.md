@@ -2,12 +2,21 @@
 
 StreamForge is a planned configurable platform for ingesting real-time market data, normalizing it into a canonical event model, applying safe declarative transformations, and delivering it to multiple output formats and transports.
 
-The Java 21 backend Maven reactor and a React/Vite dashboard shell have been initialized. The dashboard contains only accessible placeholder routes; no StreamForge runtime features, backend integration, or infrastructure services have been implemented yet.
+The Java 21 backend Maven reactor includes immutable market-data value types, STP v1 codecs, and a deterministic binary tick simulator. The React/Vite dashboard contains only accessible placeholder routes; no backend integration, network service, pipeline runtime, or infrastructure service has been implemented yet.
 
 Verify the backend from the repository root:
 
 ```sh
 ./backend/mvnw -f backend/pom.xml verify
+```
+
+Generate a deterministic binary STP fixture on a POSIX shell:
+
+```sh
+./backend/mvnw -f backend/pom.xml -pl tick-simulator -am package
+java -cp backend/tick-simulator/target/classes:backend/stp-protocol/target/classes:backend/common-model/target/classes \
+  io.streamforge.ticksimulator.TickSimulatorCli \
+  --seed 5 --symbols AAPL,MSFT --count 100 --output ticks.stp
 ```
 
 Install dashboard dependencies from the repository root:
