@@ -1,0 +1,181 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://streamforge.io/schemas/canonical/canonical-event-v1.schema.json",
+  "title": "StreamForge Canonical Event v1.0",
+  "description": "Serialization contract for the implemented version-1 canonical market-event model.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["metadata", "instrument", "payload"],
+  "properties": {
+    "metadata": { "$ref": "#/$defs/eventMetadata" },
+    "instrument": { "$ref": "#/$defs/instrumentReference" },
+    "payload": { "$ref": "#/$defs/marketEvent" }
+  },
+  "$defs": {
+    "long": {
+      "type": "integer",
+      "minimum": -9223372036854775808,
+      "maximum": 9223372036854775807
+    },
+    "nonnegativeLong": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9223372036854775807
+    },
+    "positiveLong": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9223372036854775807
+    },
+    "quantity": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4294967295
+    },
+    "fixedDecimal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mantissa", "scale"],
+      "properties": {
+        "mantissa": { "$ref": "#/$defs/long" },
+        "scale": { "type": "integer", "minimum": 0, "maximum": 18 }
+      }
+    },
+    "eventMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "eventId",
+        "schemaVersion",
+        "source",
+        "venue",
+        "exchangeTimestamp",
+        "sequenceNumber",
+        "rawEventReference"
+      ],
+      "properties": {
+        "eventId": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "schemaVersion": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["major", "minor"],
+          "properties": {
+            "major": { "const": 1 },
+            "minor": { "const": 0 }
+          }
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@-]*$"
+        },
+        "venue": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32,
+          "pattern": "^[A-Z0-9._-]+$"
+        },
+        "exchangeTimestamp": { "$ref": "#/$defs/nonnegativeLong" },
+        "receiveTimestamp": { "$ref": "#/$defs/nonnegativeLong" },
+        "sequenceNumber": { "$ref": "#/$defs/positiveLong" },
+        "rawEventReference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "^[!-~]+$"
+        }
+      }
+    },
+    "instrumentReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["symbol"],
+      "properties": {
+        "symbol": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8,
+          "pattern": "^[!-~]+$"
+        }
+      }
+    },
+    "side": { "enum": ["BUY", "SELL"] },
+    "orderAdded": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "orderId", "side", "quantity", "price"],
+      "properties": {
+        "type": { "const": "ORDER_ADDED" },
+        "orderId": { "$ref": "#/$defs/nonnegativeLong" },
+        "side": { "$ref": "#/$defs/side" },
+        "quantity": { "$ref": "#/$defs/quantity" },
+        "price": { "$ref": "#/$defs/fixedDecimal" }
+      }
+    },
+    "orderExecuted": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "orderId", "executedQuantity"],
+      "properties": {
+        "type": { "const": "ORDER_EXECUTED" },
+        "orderId": { "$ref": "#/$defs/nonnegativeLong" },
+        "executedQuantity": { "$ref": "#/$defs/quantity" }
+      }
+    },
+    "orderCancelled": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "orderId", "cancelledQuantity"],
+      "properties": {
+        "type": { "const": "ORDER_CANCELLED" },
+        "orderId": { "$ref": "#/$defs/nonnegativeLong" },
+        "cancelledQuantity": { "$ref": "#/$defs/quantity" }
+      }
+    },
+    "trade": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "tradeId", "quantity", "price"],
+      "properties": {
+        "type": { "const": "TRADE" },
+        "tradeId": { "$ref": "#/$defs/nonnegativeLong" },
+        "aggressorSide": { "$ref": "#/$defs/side" },
+        "quantity": { "$ref": "#/$defs/quantity" },
+        "price": { "$ref": "#/$defs/fixedDecimal" }
+      }
+    },
+    "quoteLevel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["price", "quantity"],
+      "properties": {
+        "price": { "$ref": "#/$defs/fixedDecimal" },
+        "quantity": { "$ref": "#/$defs/quantity" }
+      }
+    },
+    "quote": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "QUOTE" },
+        "bid": { "$ref": "#/$defs/quoteLevel" },
+        "ask": { "$ref": "#/$defs/quoteLevel" }
+      },
+      "anyOf": [
+        { "required": ["bid"] },
+        { "required": ["ask"] }
+      ]
+    },
+    "marketEvent": {
+      "oneOf": [
+        { "$ref": "#/$defs/orderAdded" },
+        { "$ref": "#/$defs/orderExecuted" },
+        { "$ref": "#/$defs/orderCancelled" },
+        { "$ref": "#/$defs/trade" },
+        { "$ref": "#/$defs/quote" }
+      ]
+    }
+  }
+}

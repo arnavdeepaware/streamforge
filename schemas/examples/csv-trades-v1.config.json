@@ -1,0 +1,19 @@
+{
+  "delimiter": ",",
+  "hasHeader": true,
+  "timestampColumn": "timestamp",
+  "timestampFormat": "EPOCH_NANOS",
+  "symbolColumn": "symbol",
+  "venueColumn": "venue",
+  "constantVenue": null,
+  "priceMantissaColumn": null,
+  "decimalPriceColumn": "price",
+  "priceScale": 2,
+  "quantityColumn": "quantity",
+  "sideColumn": "side",
+  "sideMapping": {
+    "B": "BUY",
+    "S": "SELL"
+  },
+  "source": "csv/sample-trades"
+}

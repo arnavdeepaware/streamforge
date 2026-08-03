@@ -6,6 +6,8 @@
 - [Simple Tick Protocol v1](protocol/stp-v1.md): accepted educational binary framing, message layouts, validation, compatibility rules, and implemented Java codec status.
 - [Sequence integrity tracking](protocol/sequence-integrity.md): implemented per-source sequence classifications, startup behavior, reset, overflow handling, and parser CLI reporting.
 - [STP v1 golden vectors](../schemas/examples/stp-v1-golden-vectors.md): independent byte fixtures for future codec tests.
+- [Canonical event schemas](../schemas/canonical/README.md): implemented version-1 Java model mapping, exact-value serialization rules, deterministic event IDs, and schema evolution policy.
+- [Canonical event v1 JSON Schema](../schemas/canonical/canonical-event-v1.schema.json): machine-readable serialization contract for canonical events.
 
 ## Architecture Decision Records
 
