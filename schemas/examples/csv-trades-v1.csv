@@ -1,0 +1,3 @@
+timestamp,symbol,venue,price,quantity,side,notes
+9223372036854775807,"AAPL","XNAS","123.45",100,"B","quoted, comma"
+0,"MSFT","XNAS","250.05",25,"S","ordinary row"
