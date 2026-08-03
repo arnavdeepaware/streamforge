@@ -12,7 +12,7 @@ export function PlaceholderPage({ title }: PlaceholderPageProps) {
         implemented yet.
       </p>
       <p aria-live="polite" className="status-message" role="status">
-        No StreamForge data is loaded or simulated by this dashboard.
+        This page is not connected to a control-plane feature yet.
       </p>
     </section>
   );

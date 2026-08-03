@@ -1,5 +1,8 @@
 import { Navigate, useRoutes, type RouteObject } from 'react-router-dom';
 import { AppShell } from './components/AppShell';
+import { PipelineDetailPage } from './features/pipelines/PipelineDetailPage';
+import { PipelineListPage } from './features/pipelines/PipelineListPage';
+import { SchemaRegistryPage } from './features/schemas/SchemaRegistryPage';
 import { PlaceholderPage } from './routes/PlaceholderPage';
 import { RouteErrorPage } from './routes/RouteErrorPage';
 
@@ -10,15 +13,16 @@ const routes: RouteObject[] = [
     errorElement: <RouteErrorPage />,
     children: [
       { index: true, element: <Navigate to="dashboard" replace /> },
-      { path: 'dashboard', element: <PlaceholderPage title="Dashboard" /> },
-      { path: 'pipelines', element: <PlaceholderPage title="Pipelines" /> },
+      { path: 'dashboard', element: <PipelineListPage compact /> },
+      { path: 'pipelines', element: <PipelineListPage /> },
       {
         path: 'pipelines/new',
         element: <PlaceholderPage title="New Pipeline" />,
       },
+      { path: 'pipelines/:pipelineId', element: <PipelineDetailPage /> },
       {
         path: 'schema-registry',
-        element: <PlaceholderPage title="Schema Registry" />,
+        element: <SchemaRegistryPage />,
       },
       {
         path: 'stream-inspector',

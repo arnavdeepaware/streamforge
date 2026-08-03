@@ -18,6 +18,7 @@ export function AppShell() {
       <header className="app-header">
         <p className="eyebrow">Market-data normalization</p>
         <h1>StreamForge</h1>
+        <p className="app-header__summary">Control-plane workspace</p>
       </header>
       <nav aria-label="Primary navigation" className="app-navigation">
         <ul>
