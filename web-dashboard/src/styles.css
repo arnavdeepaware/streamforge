@@ -257,6 +257,235 @@ a:focus-visible {
   padding-left: 1rem;
 }
 
+.pipeline-wizard {
+  max-width: 68rem;
+}
+
+.wizard-steps {
+  display: flex;
+  gap: 0.35rem;
+  list-style: none;
+  margin: 0 0 1.5rem;
+  overflow-x: auto;
+  padding: 0 0 0.5rem;
+}
+
+.wizard-steps li {
+  flex: 0 0 auto;
+}
+
+.wizard-step {
+  background: transparent;
+  border: 1px solid #baad96;
+  color: #18201b;
+  cursor: pointer;
+  display: grid;
+  font: inherit;
+  gap: 0.4rem;
+  grid-template-columns: 1.35rem auto;
+  padding: 0.55rem 0.7rem;
+  text-align: left;
+}
+
+.wizard-step span {
+  align-items: center;
+  background: #e6ddca;
+  border-radius: 50%;
+  display: inline-flex;
+  font-family: 'Courier New', monospace;
+  font-size: 0.75rem;
+  height: 1.35rem;
+  justify-content: center;
+  width: 1.35rem;
+}
+
+.wizard-step--current {
+  background: #173d32;
+  border-color: #173d32;
+  color: #fffaf1;
+}
+
+.wizard-step--current span {
+  background: #f4ba7a;
+  color: #173d32;
+}
+
+.wizard-panel {
+  background: #fffaf1;
+  border: 1px solid #baad96;
+  box-shadow: 7px 7px 0 #d6c9b0;
+  min-height: 20rem;
+  padding: clamp(1.25rem, 4vw, 2.25rem);
+}
+
+.wizard-panel h3 {
+  font-size: clamp(1.5rem, 3vw, 2.5rem);
+  line-height: 1;
+  margin: 0 0 1.5rem;
+}
+
+.wizard-panel fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.wizard-panel legend {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-bottom: 0.75rem;
+}
+
+.choice-card {
+  align-items: start;
+  border: 1px solid #d6c9b0;
+  cursor: pointer;
+  display: flex;
+  gap: 0.75rem;
+  margin: 0.75rem 0;
+  padding: 0.85rem;
+}
+
+.choice-card:has(input:checked) {
+  background: #edf3e7;
+  border-color: #54806a;
+}
+
+.choice-card input {
+  accent-color: #173d32;
+  margin-top: 0.2rem;
+}
+
+.choice-card span {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.choice-card small,
+.form-hint {
+  color: #56675b;
+  line-height: 1.45;
+}
+
+.field-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+}
+
+.text-field,
+.textarea-field {
+  display: grid;
+  font-weight: 700;
+  gap: 0.45rem;
+}
+
+.text-field input,
+.textarea-field textarea {
+  background: #fffdf8;
+  border: 1px solid #8e856f;
+  border-radius: 0;
+  color: #18201b;
+  font: inherit;
+  font-weight: 400;
+  min-height: 2.5rem;
+  padding: 0.55rem 0.65rem;
+}
+
+.textarea-field textarea {
+  min-height: 7rem;
+  resize: vertical;
+}
+
+.text-field input[aria-invalid='true'] {
+  border-color: #a93a2d;
+}
+
+.field-error {
+  color: #97291e;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.read-only-field {
+  align-content: center;
+  background: #edf3e7;
+  border-left: 4px solid #54806a;
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.7rem 0.85rem;
+}
+
+.read-only-field span {
+  color: #56675b;
+  font-family: 'Courier New', monospace;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.review-stack {
+  display: grid;
+  gap: 1rem;
+}
+
+.review-stack pre {
+  background: #18201b;
+  color: #e7f0df;
+  font-family: 'Courier New', monospace;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  margin: 0;
+  max-height: 18rem;
+  overflow: auto;
+  padding: 1rem;
+}
+
+.validation-summary {
+  background: #f8e6de;
+  border-left: 4px solid #c9683c;
+  padding: 0.75rem 1rem;
+}
+
+.validation-summary--success {
+  background: #edf3e7;
+  border-color: #54806a;
+}
+
+.validation-summary p,
+.validation-summary ul {
+  margin: 0;
+}
+
+.validation-summary ul {
+  margin-top: 0.5rem;
+  padding-left: 1.1rem;
+}
+
+.wizard-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  margin-top: 1.75rem;
+}
+
+.wizard-actions button,
+.review-stack > button {
+  background: #173d32;
+  border: 0;
+  color: #fffaf1;
+  cursor: pointer;
+  font: inherit;
+  padding: 0.65rem 0.9rem;
+}
+
+.wizard-actions button:disabled,
+.review-stack > button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .placeholder-page h2,
 .placeholder-page h1 {
   font-size: clamp(2rem, 5vw, 4.5rem);

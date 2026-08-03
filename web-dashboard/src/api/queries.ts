@@ -1,5 +1,9 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { controlPlaneClient } from './controlPlaneClient';
+import type {
+  CreatePipelineRequest,
+  PipelineConfiguration,
+} from './controlPlaneClient';
 
 export const controlPlaneQueryKeys = {
   pipelines: ['pipelines'] as const,
@@ -26,5 +30,19 @@ export function useSchemas() {
   return useQuery({
     queryKey: controlPlaneQueryKeys.schemas,
     queryFn: controlPlaneClient.listSchemas,
+  });
+}
+
+export function usePipelineValidation() {
+  return useMutation({
+    mutationFn: (configuration: PipelineConfiguration) =>
+      controlPlaneClient.validatePipeline(configuration),
+  });
+}
+
+export function usePipelineCreation() {
+  return useMutation({
+    mutationFn: (request: CreatePipelineRequest) =>
+      controlPlaneClient.createPipeline(request),
   });
 }

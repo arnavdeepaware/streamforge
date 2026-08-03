@@ -2,6 +2,7 @@ import { Navigate, useRoutes, type RouteObject } from 'react-router-dom';
 import { AppShell } from './components/AppShell';
 import { PipelineDetailPage } from './features/pipelines/PipelineDetailPage';
 import { PipelineListPage } from './features/pipelines/PipelineListPage';
+import { PipelineCreationPage } from './features/pipeline-creation/PipelineCreationPage';
 import { SchemaRegistryPage } from './features/schemas/SchemaRegistryPage';
 import { PlaceholderPage } from './routes/PlaceholderPage';
 import { RouteErrorPage } from './routes/RouteErrorPage';
@@ -17,7 +18,7 @@ const routes: RouteObject[] = [
       { path: 'pipelines', element: <PipelineListPage /> },
       {
         path: 'pipelines/new',
-        element: <PlaceholderPage title="New Pipeline" />,
+        element: <PipelineCreationPage />,
       },
       { path: 'pipelines/:pipelineId', element: <PipelineDetailPage /> },
       {

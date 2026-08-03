@@ -38,10 +38,41 @@ export type SchemaSummary = {
   updatedAt: string;
 };
 
+export type ApiFieldViolation = {
+  field: string;
+  message: string;
+};
+
+export type PipelineConfiguration = {
+  input: JsonObject;
+  transform: JsonObject;
+  blueprint: JsonObject;
+  output: JsonObject;
+};
+
+export type CreatePipelineRequest = {
+  name: string;
+  description: string;
+  configuration: PipelineConfiguration;
+};
+
+export type PipelineValidationResult = {
+  valid: boolean;
+  errors: ApiFieldViolation[];
+};
+
+export type JsonValue =
+  string | number | boolean | null | JsonObject | JsonValue[];
+
+export type JsonObject = {
+  [key: string]: JsonValue;
+};
+
 export class ControlPlaneApiError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    readonly fieldErrors: ApiFieldViolation[] = [],
   ) {
     super(message);
     this.name = 'ControlPlaneApiError';
@@ -59,13 +90,38 @@ export const controlPlaneClient = {
       parsePipelineDefinition,
     ),
   listSchemas: () => get('/schemas', parseSchemaPage),
+  validatePipeline: (configuration: PipelineConfiguration) =>
+    post('/pipelines/validate', { configuration }, parseValidationResult),
+  createPipeline: (request: CreatePipelineRequest) =>
+    post('/pipelines', request, parsePipelineDefinition),
 };
 
 async function get<T>(path: string, parser: (value: unknown) => T): Promise<T> {
+  return request(path, undefined, parser);
+}
+
+async function post<T>(
+  path: string,
+  body: unknown,
+  parser: (value: unknown) => T,
+): Promise<T> {
+  return request(path, body, parser);
+}
+
+async function request<T>(
+  path: string,
+  body: unknown,
+  parser: (value: unknown) => T,
+): Promise<T> {
   let response: Response;
   try {
     response = await fetch(`${apiBaseUrl}${path}`, {
-      headers: { Accept: 'application/json' },
+      method: body === undefined ? 'GET' : 'POST',
+      headers:
+        body === undefined
+          ? { Accept: 'application/json' }
+          : { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch {
     throw new ControlPlaneApiError(
@@ -74,22 +130,31 @@ async function get<T>(path: string, parser: (value: unknown) => T): Promise<T> {
     );
   }
 
-  const body = await response.json().catch(() => undefined);
+  const responseBody = await response.json().catch(() => undefined);
   if (!response.ok) {
     throw new ControlPlaneApiError(
-      problemDetail(body, response.statusText),
+      problemDetail(responseBody, response.statusText),
       response.status,
+      problemFieldErrors(responseBody),
     );
   }
 
   try {
-    return parser(body);
+    return parser(responseBody);
   } catch {
     throw new ControlPlaneApiError(
       'The control-plane API returned an unexpected response.',
       response.status,
     );
   }
+}
+
+function parseValidationResult(value: unknown): PipelineValidationResult {
+  const object = record(value);
+  return {
+    valid: boolean(object.valid),
+    errors: array(object.errors).map(parseFieldViolation),
+  };
 }
 
 function parsePipelinePage(value: unknown): PageResponse<PipelineSummary> {
@@ -163,6 +228,22 @@ function parseSchemaSummary(value: unknown): SchemaSummary {
 function problemDetail(value: unknown, fallback: string): string {
   if (isRecord(value) && typeof value.detail === 'string') return value.detail;
   return fallback || 'The control-plane API rejected this request.';
+}
+
+function problemFieldErrors(value: unknown): ApiFieldViolation[] {
+  if (!isRecord(value) || !Array.isArray(value.errors)) return [];
+  return value.errors.flatMap((error) => {
+    try {
+      return [parseFieldViolation(error)];
+    } catch {
+      return [];
+    }
+  });
+}
+
+function parseFieldViolation(value: unknown): ApiFieldViolation {
+  const object = record(value);
+  return { field: string(object.field), message: string(object.message) };
 }
 
 function record(value: unknown): Record<string, unknown> {
