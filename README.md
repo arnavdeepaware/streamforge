@@ -2,7 +2,7 @@
 
 StreamForge is a planned configurable platform for ingesting real-time market data, normalizing it into a canonical event model, applying safe declarative transformations, and delivering it to multiple output formats and transports.
 
-The Java 21 backend Maven reactor includes immutable market-data value types, STP v1 codecs, and a deterministic binary tick simulator. The React/Vite dashboard contains only accessible placeholder routes; no backend integration, network service, pipeline runtime, or infrastructure service has been implemented yet.
+The Java 21 backend Maven reactor includes immutable market-data value types, STP v1 codecs, a deterministic tick simulator, and a local TCP generator-to-parser path. The React/Vite dashboard contains only accessible placeholder routes; no dashboard integration, pipeline runtime, or infrastructure service has been implemented yet.
 
 Verify the backend from the repository root:
 
@@ -18,6 +18,31 @@ java -cp backend/tick-simulator/target/classes:backend/stp-protocol/target/class
   io.streamforge.ticksimulator.TickSimulatorCli \
   --seed 5 --symbols AAPL,MSFT --count 100 --output ticks.stp
 ```
+
+## Local TCP Demo
+
+Build both local components first:
+
+```sh
+./backend/mvnw -f backend/pom.xml -pl tick-simulator,parser-engine -am package
+```
+
+Terminal 1 starts a server that exits after serving its first finite client:
+
+```sh
+java -cp backend/tick-simulator/target/classes:backend/stp-protocol/target/classes:backend/common-model/target/classes \
+  io.streamforge.ticksimulator.TickTcpServerCli \
+  --host 127.0.0.1 --port 9010 --seed 5 --symbols AAPL,MSFT --count 10 --rate 0
+```
+
+Terminal 2 connects, incrementally decodes the STP frames, and prints each parsed event:
+
+```sh
+java -cp backend/parser-engine/target/classes:backend/stp-protocol/target/classes:backend/common-model/target/classes \
+  io.streamforge.parserengine.StpParserCli --host 127.0.0.1 --port 9010
+```
+
+The classpath separators in these examples are for POSIX shells.
 
 Install dashboard dependencies from the repository root:
 
