@@ -2,7 +2,7 @@
 
 StreamForge is a planned configurable platform for ingesting real-time market data, normalizing it into a canonical event model, applying safe declarative transformations, and delivering it to multiple output formats and transports.
 
-The Java 21 backend Maven reactor includes immutable market-data value types, STP v1 codecs, a deterministic tick simulator, and a local TCP generator-to-parser path. The React/Vite dashboard contains only accessible placeholder routes; no dashboard integration, pipeline runtime, or infrastructure service has been implemented yet.
+The Java 21 backend Maven reactor includes immutable market-data value types, STP v1 codecs, a deterministic tick simulator, a local TCP generator-to-parser path, and streaming JSONL and CSV output sinks. The React/Vite dashboard contains only accessible placeholder routes; no dashboard integration, complete pipeline composition, or infrastructure service has been implemented yet.
 
 Verify the backend from the repository root:
 

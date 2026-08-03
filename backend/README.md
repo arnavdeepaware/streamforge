@@ -1,6 +1,6 @@
 # Backend Build
 
-The backend is a Java 21 Maven multi-module build. It includes immutable market-data value types, STP v1 framing and codecs, and a deterministic tick simulator with a local TCP generator-to-parser path. It does not yet provide pipeline runtime behavior or control-plane services.
+The backend is a Java 21 Maven multi-module build. It includes immutable market-data value types, STP v1 framing and codecs, a deterministic tick simulator with a local TCP generator-to-parser path, and streaming JSONL and CSV output sinks in `pipeline-runtime`. It does not yet compose a complete pipeline runtime or provide control-plane services.
 
 ## Requirements
 
