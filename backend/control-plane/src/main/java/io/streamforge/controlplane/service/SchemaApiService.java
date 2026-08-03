@@ -26,7 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /** Transactional version-one API service for JSON Schema identities and immutable revisions. */
 @Service
-public final class SchemaApiService {
+public class SchemaApiService {
   private final SchemaDocumentValidator documentValidator;
   private final SchemaDefinitionRepository schemas;
   private final SchemaRevisionRepository revisions;

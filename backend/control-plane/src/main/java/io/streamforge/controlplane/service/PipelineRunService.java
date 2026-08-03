@@ -31,7 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /** Coordinates durable lifecycle state with one pluggable execution backend. */
 @Service
-public final class PipelineRunService {
+public class PipelineRunService {
   private final PipelineRunRepository runs;
   private final PipelineRevisionRepository revisions;
   private final InputDefinitionRepository inputs;

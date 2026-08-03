@@ -37,7 +37,7 @@ import org.springframework.transaction.annotation.Transactional;
  * revisions.
  */
 @Service
-public final class PipelineApiService {
+public class PipelineApiService {
   private final PipelineConfigurationValidator configurationValidator;
   private final PipelineDefinitionRepository pipelines;
   private final InputDefinitionRepository inputs;
