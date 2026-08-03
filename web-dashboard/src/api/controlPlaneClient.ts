@@ -68,6 +68,19 @@ export type JsonObject = {
   [key: string]: JsonValue;
 };
 
+export type CanonicalField = {
+  path: string;
+  type: string;
+  protectedField: boolean;
+};
+export type PipelinePreview = {
+  status: string;
+  input: JsonObject | null;
+  transformed: JsonObject | null;
+  output: JsonObject | null;
+  errors: ApiFieldViolation[];
+};
+
 export class ControlPlaneApiError extends Error {
   constructor(
     message: string,
@@ -94,6 +107,10 @@ export const controlPlaneClient = {
     post('/pipelines/validate', { configuration }, parseValidationResult),
   createPipeline: (request: CreatePipelineRequest) =>
     post('/pipelines', request, parsePipelineDefinition),
+  canonicalFields: () =>
+    get('/pipelines/preview/canonical-fields', parseCanonicalFields),
+  previewPipeline: (body: JsonObject, signal: AbortSignal) =>
+    post('/pipelines/preview', body, parsePreview, signal),
 };
 
 async function get<T>(path: string, parser: (value: unknown) => T): Promise<T> {
@@ -104,14 +121,16 @@ async function post<T>(
   path: string,
   body: unknown,
   parser: (value: unknown) => T,
+  signal?: AbortSignal,
 ): Promise<T> {
-  return request(path, body, parser);
+  return request(path, body, parser, signal);
 }
 
 async function request<T>(
   path: string,
   body: unknown,
   parser: (value: unknown) => T,
+  signal?: AbortSignal,
 ): Promise<T> {
   let response: Response;
   try {
@@ -122,6 +141,7 @@ async function request<T>(
           ? { Accept: 'application/json' }
           : { Accept: 'application/json', 'Content-Type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
+      signal,
     });
   } catch {
     throw new ControlPlaneApiError(
@@ -147,6 +167,33 @@ async function request<T>(
       response.status,
     );
   }
+}
+
+function parseCanonicalFields(value: unknown): CanonicalField[] {
+  return array(value).map((item) => {
+    const object = record(item);
+    return {
+      path: string(object.path),
+      type: string(object.type),
+      protectedField: boolean(object.protectedField),
+    };
+  });
+}
+
+function parsePreview(value: unknown): PipelinePreview {
+  const object = record(value);
+  return {
+    status: string(object.status),
+    input: nullableObject(object.input),
+    transformed: nullableObject(object.transformed),
+    output: nullableObject(object.output),
+    errors: array(object.errors).map(parseFieldViolation),
+  };
+}
+
+function nullableObject(value: unknown): JsonObject | null {
+  if (value === null) return null;
+  return record(value) as JsonObject;
 }
 
 function parseValidationResult(value: unknown): PipelineValidationResult {

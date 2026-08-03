@@ -4,6 +4,7 @@ const navigationItems = [
   { label: 'Dashboard', to: '/dashboard' },
   { label: 'Pipelines', to: '/pipelines' },
   { label: 'New Pipeline', to: '/pipelines/new' },
+  { label: 'Field Mapper', to: '/pipelines/mapper' },
   { label: 'Schema Registry', to: '/schema-registry' },
   { label: 'Stream Inspector', to: '/stream-inspector' },
   { label: 'Dead-Letter Events', to: '/dead-letter-events' },

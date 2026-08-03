@@ -486,6 +486,75 @@ a:focus-visible {
   opacity: 0.55;
 }
 
+.mapper-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.mapper-panel {
+  background: #fffaf1;
+  border: 1px solid #baad96;
+  padding: 1rem;
+}
+
+.mapper-panel h3,
+.mapper-panel h4 {
+  margin-top: 0;
+}
+.mapper-panel label {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.75rem 0;
+}
+.mapper-panel input,
+.mapper-panel select {
+  font: inherit;
+  padding: 0.45rem;
+}
+.mapper-panel button {
+  cursor: pointer;
+  font: inherit;
+}
+.field-list {
+  list-style: none;
+  margin: 0;
+  max-height: 32rem;
+  overflow: auto;
+  padding: 0;
+}
+.field-choice {
+  background: transparent;
+  border: 0;
+  display: flex;
+  justify-content: space-between;
+  padding: 0.4rem;
+  text-align: left;
+  width: 100%;
+}
+.field-choice--selected {
+  background: #d9e5db;
+  font-weight: 700;
+}
+.field-choice small {
+  color: #56675b;
+  font-family: 'Courier New', monospace;
+}
+.mapper-panel pre {
+  background: #18201b;
+  color: #e7f0df;
+  font-size: 0.75rem;
+  max-height: 12rem;
+  overflow: auto;
+  padding: 0.75rem;
+}
+
+@media (max-width: 960px) {
+  .mapper-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .placeholder-page h2,
 .placeholder-page h1 {
   font-size: clamp(2rem, 5vw, 4.5rem);

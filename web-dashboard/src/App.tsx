@@ -3,6 +3,7 @@ import { AppShell } from './components/AppShell';
 import { PipelineDetailPage } from './features/pipelines/PipelineDetailPage';
 import { PipelineListPage } from './features/pipelines/PipelineListPage';
 import { PipelineCreationPage } from './features/pipeline-creation/PipelineCreationPage';
+import { FieldMapperPage } from './features/pipeline-mapper/FieldMapperPage';
 import { SchemaRegistryPage } from './features/schemas/SchemaRegistryPage';
 import { PlaceholderPage } from './routes/PlaceholderPage';
 import { RouteErrorPage } from './routes/RouteErrorPage';
@@ -21,6 +22,7 @@ const routes: RouteObject[] = [
         element: <PipelineCreationPage />,
       },
       { path: 'pipelines/:pipelineId', element: <PipelineDetailPage /> },
+      { path: 'pipelines/mapper', element: <FieldMapperPage /> },
       {
         path: 'schema-registry',
         element: <SchemaRegistryPage />,

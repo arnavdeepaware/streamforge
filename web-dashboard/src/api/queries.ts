@@ -33,6 +33,14 @@ export function useSchemas() {
   });
 }
 
+export function useCanonicalFields() {
+  return useQuery({
+    queryKey: ['preview', 'canonical-fields'],
+    queryFn: controlPlaneClient.canonicalFields,
+    staleTime: Infinity,
+  });
+}
+
 export function usePipelineValidation() {
   return useMutation({
     mutationFn: (configuration: PipelineConfiguration) =>

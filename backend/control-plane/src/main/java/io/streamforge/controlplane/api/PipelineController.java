@@ -1,10 +1,12 @@
 package io.streamforge.controlplane.api;
 
 import io.streamforge.controlplane.service.PipelineApiService;
+import io.streamforge.controlplane.service.PipelinePreviewService;
 import io.streamforge.controlplane.service.PipelineRunService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.net.URI;
+import java.util.List;
 import java.util.UUID;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Pageable;
@@ -26,10 +28,13 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 public final class PipelineController {
   private final PipelineApiService pipelines;
   private final PipelineRunService runs;
+  private final PipelinePreviewService previews;
 
-  public PipelineController(PipelineApiService pipelines, PipelineRunService runs) {
+  public PipelineController(
+      PipelineApiService pipelines, PipelineRunService runs, PipelinePreviewService previews) {
     this.pipelines = pipelines;
     this.runs = runs;
+    this.previews = previews;
   }
 
   @PostMapping
@@ -57,6 +62,19 @@ public final class PipelineController {
   @Operation(summary = "Validate pipeline configuration without saving it")
   public ValidationResult validate(@RequestBody CreatePipelineRevisionRequest request) {
     return pipelines.validate(request);
+  }
+
+  @GetMapping("/preview/canonical-fields")
+  @Operation(summary = "List canonical fields available for safe mapping")
+  public List<CanonicalFieldResponse> canonicalFields() {
+    return previews.canonicalFields();
+  }
+
+  @PostMapping("/preview")
+  @Operation(
+      summary = "Execute a declarative transform and output blueprint against one sample event")
+  public PipelinePreviewResponse preview(@RequestBody PipelinePreviewRequest request) {
+    return previews.preview(request);
   }
 
   @PostMapping("/{id}/revisions")
