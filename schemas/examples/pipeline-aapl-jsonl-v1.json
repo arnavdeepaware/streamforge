@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "1.0",
+  "input": {
+    "type": "JSONL",
+    "path": "pipeline-aapl-input.jsonl",
+    "mode": "CONTINUE_WITH_ERRORS"
+  },
+  "blueprint": "aapl-output-blueprint-v1.json",
+  "output": {
+    "type": "JSONL",
+    "path": "../../tmp/pipeline-aapl-output.jsonl"
+  }
+}

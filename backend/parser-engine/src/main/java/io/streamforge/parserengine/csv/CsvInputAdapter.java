@@ -51,7 +51,8 @@ public final class CsvInputAdapter {
     try {
       first = reader.next();
     } catch (CsvRecordReader.CsvSyntaxException error) {
-      eventConsumer.accept(error(error.row(), CsvErrorReason.MALFORMED_ROW, error.getMessage()));
+      eventConsumer.accept(
+          error(error.row(), CsvErrorReason.MALFORMED_ROW, error.getMessage(), ""));
       return new CsvProcessingResult(0, 0, 1);
     }
 
@@ -64,7 +65,8 @@ public final class CsvInputAdapter {
     try {
       resolver = ColumnResolver.create(first.orElseThrow().fields(), config);
     } catch (CsvInputException error) {
-      eventConsumer.accept(error(headerRow, error.reason, error.getMessage()));
+      eventConsumer.accept(
+          error(headerRow, error.reason, error.getMessage(), first.orElseThrow().sourceText()));
       return new CsvProcessingResult(0, 0, 1);
     }
 
@@ -73,7 +75,8 @@ public final class CsvInputAdapter {
     try {
       current = config.hasHeader() ? reader.next() : first;
     } catch (CsvRecordReader.CsvSyntaxException error) {
-      eventConsumer.accept(error(error.row(), CsvErrorReason.MALFORMED_ROW, error.getMessage()));
+      eventConsumer.accept(
+          error(error.row(), CsvErrorReason.MALFORMED_ROW, error.getMessage(), ""));
       return new CsvProcessingResult(0, 0, 1);
     }
     long dataRowOrdinal = 0;
@@ -85,9 +88,14 @@ public final class CsvInputAdapter {
       try {
         result = normalize(record, dataRowOrdinal, resolver, config);
       } catch (CsvInputException error) {
-        result = error(record.startLine(), error.reason, error.getMessage());
+        result = error(record.startLine(), error.reason, error.getMessage(), record.sourceText());
       } catch (RuntimeException error) {
-        result = error(record.startLine(), CsvErrorReason.NORMALIZATION_ERROR, detail(error));
+        result =
+            error(
+                record.startLine(),
+                CsvErrorReason.NORMALIZATION_ERROR,
+                detail(error),
+                record.sourceText());
       }
       eventConsumer.accept(result);
       if (result instanceof CsvCanonicalEvent) {
@@ -101,7 +109,8 @@ public final class CsvInputAdapter {
       try {
         current = reader.next();
       } catch (CsvRecordReader.CsvSyntaxException error) {
-        eventConsumer.accept(error(error.row(), CsvErrorReason.MALFORMED_ROW, error.getMessage()));
+        eventConsumer.accept(
+            error(error.row(), CsvErrorReason.MALFORMED_ROW, error.getMessage(), ""));
         counts.errorsReported++;
         break;
       }
@@ -168,7 +177,7 @@ public final class CsvInputAdapter {
             metadata,
             new InstrumentReference(symbol),
             new Trade(new TradeId(sequence), Optional.of(side), quantity, price));
-    return new CsvCanonicalEvent(record.startLine(), event);
+    return new CsvCanonicalEvent(record.startLine(), event, record.sourceText());
   }
 
   private static EventTimestamp parseTimestamp(String value, CsvTimestampFormat format) {
@@ -235,8 +244,9 @@ public final class CsvInputAdapter {
     }
   }
 
-  private static CsvError error(long row, CsvErrorReason reason, String detail) {
-    return new CsvError(row, reason, detail == null || detail.isBlank() ? reason.name() : detail);
+  private static CsvError error(long row, CsvErrorReason reason, String detail, String sourceText) {
+    return new CsvError(
+        row, reason, detail == null || detail.isBlank() ? reason.name() : detail, sourceText);
   }
 
   private static String detail(RuntimeException error) {

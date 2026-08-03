@@ -43,9 +43,10 @@ abstract class AbstractOutputSink implements OutputSink {
         output = new BufferedOutputStream(callerStream);
       } else {
         Path parent = destination.getParent();
-        if (parent == null || !Files.isDirectory(parent)) {
-          throw new IOException("destination parent directory does not exist: " + parent);
+        if (parent == null) {
+          throw new IOException("destination must have a parent directory");
         }
+        Files.createDirectories(parent);
         temporaryFile = Files.createTempFile(parent, ".streamforge-output-", ".tmp");
         output = new BufferedOutputStream(Files.newOutputStream(temporaryFile));
       }

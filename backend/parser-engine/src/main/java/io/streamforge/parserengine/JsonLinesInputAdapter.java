@@ -103,19 +103,19 @@ public final class JsonLinesInputAdapter {
 
   private JsonLinesEvent parseLine(long lineNumber, String line) {
     if (line.isBlank()) {
-      return error(lineNumber, JsonLinesErrorReason.EMPTY_LINE, "line is empty");
+      return error(lineNumber, line, JsonLinesErrorReason.EMPTY_LINE, "line is empty");
     }
     try {
       JsonNode root = mapper.readTree(line);
       requireObject(root, "record");
       CanonicalEventDto dto = mapper.treeToValue(root, CanonicalEventDto.class);
-      return new JsonLinesCanonicalEvent(lineNumber, toCanonical(dto, root));
+      return new JsonLinesCanonicalEvent(lineNumber, toCanonical(dto, root), line);
     } catch (LineValidationException error) {
-      return error(lineNumber, error.reason, error.getMessage());
+      return error(lineNumber, line, error.reason, error.getMessage());
     } catch (JsonProcessingException error) {
-      return error(lineNumber, JsonLinesErrorReason.MALFORMED_JSON, detail(error));
+      return error(lineNumber, line, JsonLinesErrorReason.MALFORMED_JSON, detail(error));
     } catch (IllegalArgumentException error) {
-      return error(lineNumber, JsonLinesErrorReason.NORMALIZATION_ERROR, detail(error));
+      return error(lineNumber, line, JsonLinesErrorReason.NORMALIZATION_ERROR, detail(error));
     }
   }
 
@@ -379,9 +379,13 @@ public final class JsonLinesInputAdapter {
     return new LineValidationException(reason, detail);
   }
 
-  private static JsonLinesError error(long lineNumber, JsonLinesErrorReason reason, String detail) {
+  private static JsonLinesError error(
+      long lineNumber, String sourceText, JsonLinesErrorReason reason, String detail) {
     return new JsonLinesError(
-        lineNumber, reason, detail == null || detail.isBlank() ? reason.name() : detail);
+        lineNumber,
+        reason,
+        detail == null || detail.isBlank() ? reason.name() : detail,
+        sourceText);
   }
 
   private static String detail(Exception error) {

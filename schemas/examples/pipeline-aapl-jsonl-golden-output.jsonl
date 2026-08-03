@@ -1,0 +1,1 @@
+{"event":{"occurredAt":"1970-01-01T00:00:01Z","sequence":1,"symbol":"AAPL"},"flags":["market-data",true],"order":{"id":1001,"price":"123.45","quantity":100,"side":"BUY"},"version":1}

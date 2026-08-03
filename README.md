@@ -2,7 +2,15 @@
 
 StreamForge is a planned configurable platform for ingesting real-time market data, normalizing it into a canonical event model, applying safe declarative transformations, and delivering it to multiple output formats and transports.
 
-The Java 21 backend Maven reactor includes immutable market-data value types, STP v1 codecs, a deterministic tick simulator, a local TCP generator-to-parser path, and streaming JSONL and CSV output sinks. The React/Vite dashboard contains only accessible placeholder routes; no dashboard integration, complete pipeline composition, or infrastructure service has been implemented yet.
+The Java 21 backend Maven reactor includes immutable market-data value types, STP v1 codecs, a deterministic tick simulator, a local TCP generator-to-parser path, streaming JSONL and CSV output sinks, and a local in-process pipeline runner for STP binary, JSONL, and CSV files. The React/Vite dashboard contains only accessible placeholder routes; no dashboard integration or infrastructure service has been implemented yet.
+
+The local pipeline runner can also quarantine record-level failures to a staged JSONL dead-letter
+file with deterministic IDs and opt-in, bounded payload capture. Distributed dead-letter handling
+is not implemented.
+
+The control plane is a separate Spring Boot service that persists validated, credential-free
+pipeline definitions and revisions in PostgreSQL. It does not execute pipelines or authenticate
+users. See [`backend/control-plane/README.md`](backend/control-plane/README.md) for local startup.
 
 Verify the backend from the repository root:
 
