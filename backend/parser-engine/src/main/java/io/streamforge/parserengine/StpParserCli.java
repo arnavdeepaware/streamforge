@@ -1,6 +1,7 @@
 package io.streamforge.parserengine;
 
 import io.streamforge.stp.protocol.ParsedStpFrame;
+import io.streamforge.stp.protocol.StpMessage;
 import io.streamforge.stp.protocol.StpParseEvent;
 import io.streamforge.stp.protocol.StpParseFailure;
 import java.io.PrintStream;
@@ -25,12 +26,24 @@ public final class StpParserCli {
         standardOutput.print(usage());
         return 0;
       }
+      SequenceIntegrityTracker integrityTracker =
+          options.reportSequenceIntegrity ? new SequenceIntegrityTracker() : null;
+      SequenceSource sequenceSource =
+          options.reportSequenceIntegrity
+              ? new SequenceSource(
+                  options.source == null ? options.host + ":" + options.port : options.source)
+              : null;
       StpParserClientResult result =
           new StpTcpParserClient()
               .parse(
                   options.host,
                   options.port,
-                  event -> printEvent(event, standardOutput, standardError));
+                  StpTcpParserClient.DEFAULT_MAXIMUM_FRAME_SIZE,
+                  !options.reportSequenceIntegrity,
+                  event -> {
+                    printEvent(event, standardOutput, standardError);
+                    reportIntegrity(event, integrityTracker, sequenceSource, standardOutput);
+                  });
       standardError.println(
           "connection complete: "
               + result.parsedFrames()
@@ -59,11 +72,28 @@ public final class StpParserCli {
     }
   }
 
+  private static void reportIntegrity(
+      StpParseEvent event,
+      SequenceIntegrityTracker integrityTracker,
+      SequenceSource sequenceSource,
+      PrintStream standardOutput) {
+    if (integrityTracker == null
+        || !(event instanceof ParsedStpFrame frame)
+        || !(frame.result() instanceof StpMessage message)) {
+      return;
+    }
+    SequenceIntegrityEvent integrityEvent =
+        integrityTracker.track(sequenceSource, message.header().sequenceNumber());
+    standardOutput.println("sequence-integrity: " + integrityEvent);
+  }
+
   private static String usage() {
     return """
         Usage: StpParserCli [options]
           --host <hostname>             Server address (default: 127.0.0.1)
           --port <1..65535>             Server TCP port (default: 9010)
+          --report-sequence-integrity   Print sequence integrity events for known STP messages
+          --source <identifier>         Logical source/session for integrity reporting
           --help                        Show this message
         """;
   }
@@ -71,6 +101,8 @@ public final class StpParserCli {
   private static final class ClientOptions {
     private String host = "127.0.0.1";
     private int port = 9_010;
+    private boolean reportSequenceIntegrity;
+    private String source;
     private boolean helpRequested;
 
     private static ClientOptions parse(String[] arguments) {
@@ -84,12 +116,23 @@ public final class StpParserCli {
           options.helpRequested = true;
           continue;
         }
+        if ("--report-sequence-integrity".equals(option)) {
+          options.reportSequenceIntegrity = true;
+          continue;
+        }
         String value = requireValue(arguments, ++index, option);
         switch (option) {
           case "--host" -> options.host = value;
           case "--port" -> options.port = parsePort(value);
+          case "--source" -> options.source = value;
           default -> throw new UsageException("unknown option " + option);
         }
+      }
+      if (options.source != null && options.source.isBlank()) {
+        throw new UsageException("--source must not be blank");
+      }
+      if (options.source != null && !options.reportSequenceIntegrity) {
+        throw new UsageException("--source requires --report-sequence-integrity");
       }
       return options;
     }

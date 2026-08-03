@@ -177,6 +177,8 @@ For any complete known frame with invalid fields, the decoder consumes the compl
 
 Sequence numbers determine event order within one configured stream. They must start at any positive value and then increase strictly; gaps are permitted. The protocol does not define ordering across streams.
 
+The default incremental decoder rejects duplicate and decreasing sequences. The implemented parser sequence-integrity reporting mode instead preserves field-valid messages for an external classifier; see [Sequence integrity tracking](sequence-integrity.md) for its explicit startup, gap, duplicate, late-message, reset, and overflow behavior.
+
 Event timestamps represent Unix-epoch nanoseconds and may be equal, decrease, or differ from ingestion time. A timestamp therefore never replaces the sequence number as the ordering key.
 
 ## Compatibility and Versioning

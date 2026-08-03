@@ -17,6 +17,7 @@ public final class IncrementalStpDecoder {
   private static final int NO_FRAME_SIZE = -1;
 
   private final int maximumFrameSize;
+  private final boolean enforceStreamSequence;
   private final ByteBuffer frameBuffer;
   private final StpDecoder frameDecoder;
 
@@ -29,6 +30,16 @@ public final class IncrementalStpDecoder {
   private boolean ended;
 
   public IncrementalStpDecoder(int maximumFrameSize) {
+    this(maximumFrameSize, true);
+  }
+
+  /**
+   * Creates a bounded decoder, optionally leaving stream-sequence classification to a caller.
+   *
+   * <p>When {@code enforceStreamSequence} is false, framing and field validation still apply, but
+   * duplicate and out-of-order known messages are emitted for external integrity tracking.
+   */
+  public IncrementalStpDecoder(int maximumFrameSize, boolean enforceStreamSequence) {
     int minimumFrameSize = StpProtocol.LENGTH_FIELD_WIDTH + StpProtocol.MIN_ENCODED_LENGTH;
     int protocolMaximumFrameSize = StpProtocol.LENGTH_FIELD_WIDTH + StpProtocol.MAX_ENCODED_LENGTH;
     if (maximumFrameSize < minimumFrameSize || maximumFrameSize > protocolMaximumFrameSize) {
@@ -39,6 +50,7 @@ public final class IncrementalStpDecoder {
               + protocolMaximumFrameSize);
     }
     this.maximumFrameSize = maximumFrameSize;
+    this.enforceStreamSequence = enforceStreamSequence;
     this.frameBuffer = ByteBuffer.allocate(maximumFrameSize).order(ByteOrder.BIG_ENDIAN);
     this.frameDecoder = new StpDecoder();
   }
@@ -148,7 +160,9 @@ public final class IncrementalStpDecoder {
     frameBuffer.flip();
     try {
       StpDecodeResult result = frameDecoder.decode(frameBuffer);
-      if (result instanceof StpMessage message && !acceptSequence(message, events)) {
+      if (result instanceof StpMessage message
+          && enforceStreamSequence
+          && !acceptSequence(message, events)) {
         return;
       }
       events.add(new ParsedStpFrame(result));

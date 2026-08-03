@@ -56,7 +56,9 @@ In terminal 2, connect and print parsed events:
 
 ```sh
 java -cp backend/parser-engine/target/classes:backend/stp-protocol/target/classes:backend/common-model/target/classes \
-  io.streamforge.parserengine.StpParserCli --host 127.0.0.1 --port 9010
+  io.streamforge.parserengine.StpParserCli \
+  --host 127.0.0.1 --port 9010 \
+  --report-sequence-integrity --source demo-session
 ```
 
-The TCP server writes directly to each client socket. TCP flow control blocks generation for a slow client instead of accumulating an unbounded application queue. The classpath separators above are for POSIX shells.
+Sequence integrity reporting is optional; it prints structured expected, gap, duplicate, and late/out-of-order events for the named logical source/session. The TCP server writes directly to each client socket. TCP flow control blocks generation for a slow client instead of accumulating an unbounded application queue. The classpath separators above are for POSIX shells.

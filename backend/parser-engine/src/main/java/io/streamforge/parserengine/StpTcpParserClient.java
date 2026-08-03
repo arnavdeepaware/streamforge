@@ -23,12 +23,28 @@ public final class StpTcpParserClient {
   /** Parses one connection using the STP v1 maximum known frame size. */
   public StpParserClientResult parse(String host, int port, Consumer<StpParseEvent> eventConsumer)
       throws IOException {
-    return parse(host, port, DEFAULT_MAXIMUM_FRAME_SIZE, eventConsumer);
+    return parse(host, port, DEFAULT_MAXIMUM_FRAME_SIZE, true, eventConsumer);
   }
 
   /** Parses one connection with a caller-selected bounded incremental decoder capacity. */
   public StpParserClientResult parse(
       String host, int port, int maximumFrameSize, Consumer<StpParseEvent> eventConsumer)
+      throws IOException {
+    return parse(host, port, maximumFrameSize, true, eventConsumer);
+  }
+
+  /**
+   * Parses one connection, optionally preserving sequence anomalies for an external tracker.
+   *
+   * <p>Framing and field validation always remain enabled. Set {@code enforceStreamSequence} to
+   * false only when a {@link SequenceIntegrityTracker} will classify every parsed message.
+   */
+  public StpParserClientResult parse(
+      String host,
+      int port,
+      int maximumFrameSize,
+      boolean enforceStreamSequence,
+      Consumer<StpParseEvent> eventConsumer)
       throws IOException {
     if (host == null || host.isBlank()) {
       throw new IllegalArgumentException("host must not be blank");
@@ -38,7 +54,8 @@ public final class StpTcpParserClient {
     }
     Objects.requireNonNull(eventConsumer, "eventConsumer must not be null");
 
-    IncrementalStpDecoder decoder = new IncrementalStpDecoder(maximumFrameSize);
+    IncrementalStpDecoder decoder =
+        new IncrementalStpDecoder(maximumFrameSize, enforceStreamSequence);
     EventCounter counter = new EventCounter(eventConsumer);
     try (Socket socket = new Socket()) {
       socket.connect(new InetSocketAddress(host, port));

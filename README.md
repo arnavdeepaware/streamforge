@@ -39,7 +39,9 @@ Terminal 2 connects, incrementally decodes the STP frames, and prints each parse
 
 ```sh
 java -cp backend/parser-engine/target/classes:backend/stp-protocol/target/classes:backend/common-model/target/classes \
-  io.streamforge.parserengine.StpParserCli --host 127.0.0.1 --port 9010
+  io.streamforge.parserengine.StpParserCli \
+  --host 127.0.0.1 --port 9010 \
+  --report-sequence-integrity --source demo-session
 ```
 
 The classpath separators in these examples are for POSIX shells.
