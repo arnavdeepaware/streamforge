@@ -1,0 +1,43 @@
+{
+  "schemaVersion": "1.0",
+  "output": {
+    "kind": "object",
+    "fields": {
+      "event": {
+        "kind": "object",
+        "fields": {
+          "symbol": { "kind": "reference", "source": "canonical", "path": "instrument.symbol" },
+          "sequence": { "kind": "reference", "source": "canonical", "path": "metadata.sequenceNumber" },
+          "occurredAt": { "kind": "format", "source": "canonical", "path": "metadata.exchangeTimestamp", "format": "TIMESTAMP_ISO_UTC" }
+        }
+      },
+      "order": {
+        "kind": "object",
+        "fields": {
+          "id": { "kind": "reference", "source": "canonical", "path": "payload.orderId" },
+          "side": { "kind": "reference", "source": "canonical", "path": "payload.side" },
+          "price": { "kind": "format", "source": "canonical", "path": "payload.price", "format": "FIXED_DECIMAL_PLAIN" },
+          "quantity": { "kind": "reference", "source": "canonical", "path": "payload.quantity" }
+        }
+      },
+      "flags": {
+        "kind": "array",
+        "items": [
+          { "kind": "literal", "value": "market-data" },
+          {
+            "kind": "conditional",
+            "condition": {
+              "type": "comparison",
+              "source": "canonical",
+              "path": "payload.side",
+              "operator": "EQ",
+              "value": { "type": "ENUM", "value": "BUY" }
+            },
+            "value": { "kind": "literal", "value": true }
+          }
+        ]
+      },
+      "version": { "kind": "literal", "value": 1 }
+    }
+  }
+}

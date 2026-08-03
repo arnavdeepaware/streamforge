@@ -8,6 +8,9 @@
 - [STP v1 golden vectors](../schemas/examples/stp-v1-golden-vectors.md): independent byte fixtures for future codec tests.
 - [Canonical event schemas](../schemas/canonical/README.md): implemented version-1 Java model mapping, exact-value serialization rules, deterministic event IDs, and schema evolution policy.
 - [Canonical event v1 JSON Schema](../schemas/canonical/canonical-event-v1.schema.json): machine-readable serialization contract for canonical events.
+- [Transformation configuration v1](../schemas/transformations/README.md): implemented typed configuration, compilation boundary, supported operations, and security restrictions.
+- [Transformation configuration v1 JSON Schema](../schemas/transformations/transformation-v1.schema.json): closed machine-readable contract for safe declarative rules.
+- [Output blueprint v1](../schemas/transformations/output-blueprint-v1.schema.json): closed machine-readable nested output contract.
 
 ## Architecture Decision Records
 

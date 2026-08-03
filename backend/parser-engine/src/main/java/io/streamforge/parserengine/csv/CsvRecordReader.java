@@ -10,6 +10,7 @@ import java.util.Optional;
 
 /** Bounded-memory CSV record reader supporting quoted delimiters and quoted line breaks. */
 final class CsvRecordReader {
+  private static final int MAXIMUM_CAPTURED_SOURCE_CHARACTERS = 16_384;
 
   private final PushbackReader input;
   private final char delimiter;
@@ -25,6 +26,7 @@ final class CsvRecordReader {
   Optional<CsvRecord> next() throws IOException {
     List<String> fields = new ArrayList<>();
     StringBuilder field = new StringBuilder();
+    StringBuilder raw = new StringBuilder();
     long startLine = physicalLine;
     boolean inQuotes = false;
     boolean fieldStarted = false;
@@ -41,16 +43,18 @@ final class CsvRecordReader {
           return Optional.empty();
         }
         fields.add(field.toString());
-        return Optional.of(new CsvRecord(startLine, List.copyOf(fields)));
+        return Optional.of(new CsvRecord(startLine, List.copyOf(fields), raw.toString()));
       }
 
       char character = (char) next;
+      capture(raw, character);
       sawCharacter = true;
       if (inQuotes) {
         if (character == '"') {
           int following = input.read();
           if (following == '"') {
             field.append('"');
+            capture(raw, '"');
           } else {
             inQuotes = false;
             afterClosingQuote = true;
@@ -76,9 +80,9 @@ final class CsvRecordReader {
           continue;
         }
         if (character == '\r' || character == '\n') {
-          finishLine(character);
+          finishLine(character, raw);
           fields.add(field.toString());
-          return Optional.of(new CsvRecord(startLine, List.copyOf(fields)));
+          return Optional.of(new CsvRecord(startLine, List.copyOf(fields), raw.toString()));
         }
         throw syntax(
             startLine, "characters after a closing quote must be a delimiter or line break");
@@ -95,9 +99,9 @@ final class CsvRecordReader {
         inQuotes = true;
         fieldStarted = true;
       } else if (character == '\r' || character == '\n') {
-        finishLine(character);
+        finishLine(character, raw);
         fields.add(field.toString());
-        return Optional.of(new CsvRecord(startLine, List.copyOf(fields)));
+        return Optional.of(new CsvRecord(startLine, List.copyOf(fields), raw.toString()));
       } else {
         field.append(character);
         fieldStarted = true;
@@ -105,9 +109,12 @@ final class CsvRecordReader {
     }
   }
 
-  private void finishLine(char character) throws IOException {
+  private void finishLine(char character, StringBuilder raw) throws IOException {
     if (character == '\r') {
       int following = input.read();
+      if (following == '\n') {
+        capture(raw, '\n');
+      }
       if (following != '\n' && following != -1) {
         input.unread(following);
       }
@@ -119,7 +126,14 @@ final class CsvRecordReader {
     return new CsvSyntaxException(row, detail);
   }
 
-  record CsvRecord(long startLine, List<String> fields) {}
+  /** Keeps error context bounded; parsed fields remain the adapter's authoritative input. */
+  private static void capture(StringBuilder raw, char character) {
+    if (raw.length() < MAXIMUM_CAPTURED_SOURCE_CHARACTERS) {
+      raw.append(character);
+    }
+  }
+
+  record CsvRecord(long startLine, List<String> fields, String sourceText) {}
 
   static final class CsvSyntaxException extends IOException {
     private final long row;

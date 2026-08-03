@@ -96,7 +96,8 @@ class CsvInputAdapterTest {
             new CsvError(
                 1,
                 CsvErrorReason.MISSING_COLUMN,
-                "CSV header is missing column: missing_timestamp"));
+                "CSV header is missing column: missing_timestamp",
+                "timestamp,symbol,venue,price,quantity,side\n"));
   }
 
   @Test

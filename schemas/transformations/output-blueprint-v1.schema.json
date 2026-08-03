@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://streamforge.io/schemas/transformations/output-blueprint-v1.schema.json",
+  "title": "StreamForge Output Blueprint v1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "output"],
+  "properties": { "schemaVersion": { "const": "1.0" }, "output": { "$ref": "#/$defs/object" } },
+  "$defs": {
+    "path": { "type": "string", "minLength": 1, "maxLength": 256, "pattern": "^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*){0,15}$" },
+    "reference": { "type": "object", "additionalProperties": false, "required": ["kind","source","path"], "properties": { "kind": {"const":"reference"}, "source": {"enum":["canonical","transformed"]}, "path": {"$ref":"#/$defs/path"} } },
+    "literal": { "type": "object", "additionalProperties": false, "required": ["kind","value"], "properties": { "kind": {"const":"literal"}, "value": {"type":["string","boolean","number"]} } },
+    "format": { "type": "object", "additionalProperties": false, "required": ["kind","source","path","format"], "properties": { "kind": {"const":"format"}, "source": {"enum":["canonical","transformed"]}, "path": {"$ref":"#/$defs/path"}, "format": {"enum":["FIXED_DECIMAL_PLAIN","TIMESTAMP_ISO_UTC"]} } },
+    "stringValue": { "type": "object", "additionalProperties": false, "required": ["type","value"], "properties": { "type":{"const":"STRING"}, "value":{"type":"string"} } },
+    "booleanValue": { "type": "object", "additionalProperties": false, "required": ["type","value"], "properties": { "type":{"const":"BOOLEAN"}, "value":{"type":"boolean"} } },
+    "int64Value": { "type": "object", "additionalProperties": false, "required": ["type","value"], "properties": { "type":{"const":"INT64"}, "value":{"type":"integer","minimum":-9223372036854775808,"maximum":9223372036854775807} } },
+    "fixedDecimalValue": { "type": "object", "additionalProperties": false, "required": ["type","mantissa","scale"], "properties": { "type":{"const":"FIXED_DECIMAL"}, "mantissa":{"type":"integer","minimum":-9223372036854775808,"maximum":9223372036854775807}, "scale":{"type":"integer","minimum":0,"maximum":18} } },
+    "enumValue": { "type": "object", "additionalProperties": false, "required": ["type","value"], "properties": { "type":{"const":"ENUM"}, "value":{"type":"string","minLength":1} } },
+    "timestampNanosValue": { "type": "object", "additionalProperties": false, "required": ["type","value"], "properties": { "type":{"const":"TIMESTAMP_NANOS"}, "value":{"type":"integer","minimum":0,"maximum":9223372036854775807} } },
+    "typedValue": { "oneOf": [{"$ref":"#/$defs/stringValue"},{"$ref":"#/$defs/booleanValue"},{"$ref":"#/$defs/int64Value"},{"$ref":"#/$defs/fixedDecimalValue"},{"$ref":"#/$defs/enumValue"},{"$ref":"#/$defs/timestampNanosValue"}] },
+    "comparisonCondition": { "type": "object", "additionalProperties": false, "required": ["type","source","path","operator","value"], "properties": { "type":{"const":"comparison"}, "source":{"enum":["canonical","transformed"]}, "path":{"$ref":"#/$defs/path"}, "operator":{"enum":["EQ","NE","LT","LTE","GT","GTE"]}, "value":{"$ref":"#/$defs/typedValue"} } },
+    "conditionList": { "type": "object", "additionalProperties": false, "required": ["type","conditions"], "properties": { "type":{"enum":["all","any"]}, "conditions":{"type":"array","minItems":1,"maxItems":256,"items":{"$ref":"#/$defs/condition"}} } },
+    "notCondition": { "type": "object", "additionalProperties": false, "required": ["type","condition"], "properties": { "type":{"const":"not"}, "condition":{"$ref":"#/$defs/condition"} } },
+    "condition": { "oneOf": [{"$ref":"#/$defs/comparisonCondition"},{"$ref":"#/$defs/conditionList"},{"$ref":"#/$defs/notCondition"}] },
+    "object": { "type": "object", "additionalProperties": false, "required": ["kind","fields"], "properties": { "kind":{"const":"object"}, "fields": {"type":"object","additionalProperties":{"$ref":"#/$defs/value"}} } },
+    "array": { "type": "object", "additionalProperties": false, "required": ["kind","items"], "properties": { "kind":{"const":"array"}, "items":{"type":"array","maxItems":256,"items":{"$ref":"#/$defs/value"}} } },
+    "conditional": { "type": "object", "additionalProperties": false, "required": ["kind","condition","value"], "properties": { "kind":{"const":"conditional"}, "condition":{"$ref":"#/$defs/condition"}, "value":{"$ref":"#/$defs/value"} } },
+    "value": { "oneOf": [{"$ref":"#/$defs/reference"},{"$ref":"#/$defs/literal"},{"$ref":"#/$defs/format"},{"$ref":"#/$defs/object"},{"$ref":"#/$defs/array"},{"$ref":"#/$defs/conditional"}] }
+  }
+}

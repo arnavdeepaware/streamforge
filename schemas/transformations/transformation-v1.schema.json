@@ -1,0 +1,271 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://streamforge.io/schemas/transformations/transformation-v1.schema.json",
+  "title": "StreamForge Transformation Configuration v1.0",
+  "description": "Closed, non-executable configuration schema for safe declarative transformations.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "operations"],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "operations": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": { "$ref": "#/$defs/operation" }
+    }
+  },
+  "$defs": {
+    "int64": {
+      "type": "integer",
+      "minimum": -9223372036854775808,
+      "maximum": 9223372036854775807
+    },
+    "nonnegativeInt64": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9223372036854775807
+    },
+    "fieldPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*){0,15}$",
+      "not": {
+        "pattern": "(^|\\.)(class|classLoader|getClass|metaClass|prototype|constructor|__proto__)(\\.|$)"
+      }
+    },
+    "scalarType": {
+      "enum": ["STRING", "BOOLEAN", "INT64", "FIXED_DECIMAL", "ENUM", "TIMESTAMP_NANOS"]
+    },
+    "stringValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "value"],
+      "properties": {
+        "type": { "const": "STRING" },
+        "value": { "type": "string" }
+      }
+    },
+    "booleanValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "value"],
+      "properties": {
+        "type": { "const": "BOOLEAN" },
+        "value": { "type": "boolean" }
+      }
+    },
+    "int64Value": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "value"],
+      "properties": {
+        "type": { "const": "INT64" },
+        "value": { "$ref": "#/$defs/int64" }
+      }
+    },
+    "fixedDecimalValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "mantissa", "scale"],
+      "properties": {
+        "type": { "const": "FIXED_DECIMAL" },
+        "mantissa": { "$ref": "#/$defs/int64" },
+        "scale": { "type": "integer", "minimum": 0, "maximum": 18 }
+      }
+    },
+    "enumValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "value"],
+      "properties": {
+        "type": { "const": "ENUM" },
+        "value": { "type": "string", "minLength": 1, "pattern": "\\S" }
+      }
+    },
+    "timestampNanosValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "value"],
+      "properties": {
+        "type": { "const": "TIMESTAMP_NANOS" },
+        "value": { "$ref": "#/$defs/nonnegativeInt64" }
+      }
+    },
+    "typedValue": {
+      "oneOf": [
+        { "$ref": "#/$defs/stringValue" },
+        { "$ref": "#/$defs/booleanValue" },
+        { "$ref": "#/$defs/int64Value" },
+        { "$ref": "#/$defs/fixedDecimalValue" },
+        { "$ref": "#/$defs/enumValue" },
+        { "$ref": "#/$defs/timestampNanosValue" }
+      ]
+    },
+    "comparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "field", "operator", "value"],
+      "properties": {
+        "type": { "const": "comparison" },
+        "field": { "$ref": "#/$defs/fieldPath" },
+        "operator": { "enum": ["EQ", "NE", "LT", "LTE", "GT", "GTE"] },
+        "value": { "$ref": "#/$defs/typedValue" }
+      }
+    },
+    "conditionList": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "conditions"],
+      "properties": {
+        "type": { "enum": ["all", "any"] },
+        "conditions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": { "$ref": "#/$defs/condition" }
+        }
+      }
+    },
+    "notCondition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "condition"],
+      "properties": {
+        "type": { "const": "not" },
+        "condition": { "$ref": "#/$defs/condition" }
+      }
+    },
+    "condition": {
+      "oneOf": [
+        { "$ref": "#/$defs/comparison" },
+        { "$ref": "#/$defs/conditionList" },
+        { "$ref": "#/$defs/notCondition" }
+      ]
+    },
+    "select": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "fields"],
+      "properties": {
+        "op": { "const": "select" },
+        "fields": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/fieldPath" }
+        }
+      }
+    },
+    "rename": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "from", "to"],
+      "properties": {
+        "op": { "const": "rename" },
+        "from": { "$ref": "#/$defs/fieldPath" },
+        "to": { "$ref": "#/$defs/fieldPath" }
+      }
+    },
+    "remove": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "path"],
+      "properties": {
+        "op": { "const": "remove" },
+        "path": { "$ref": "#/$defs/fieldPath" }
+      }
+    },
+    "addConstant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "path", "value"],
+      "properties": {
+        "op": { "const": "add_constant" },
+        "path": { "$ref": "#/$defs/fieldPath" },
+        "value": { "$ref": "#/$defs/typedValue" }
+      }
+    },
+    "cast": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "path", "toType"],
+      "properties": {
+        "op": { "const": "cast" },
+        "path": { "$ref": "#/$defs/fieldPath" },
+        "toType": { "$ref": "#/$defs/scalarType" }
+      }
+    },
+    "scaleFixedDecimal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "path", "targetScale"],
+      "properties": {
+        "op": { "const": "scale_fixed_decimal" },
+        "path": { "$ref": "#/$defs/fieldPath" },
+        "targetScale": { "type": "integer", "minimum": 0, "maximum": 18 }
+      }
+    },
+    "enumMap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "path", "mapping"],
+      "properties": {
+        "op": { "const": "enum_map" },
+        "path": { "$ref": "#/$defs/fieldPath" },
+        "mapping": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 1024,
+          "additionalProperties": { "type": "string", "minLength": 1, "pattern": "\\S" },
+          "propertyNames": { "minLength": 1, "pattern": "\\S" }
+        }
+      }
+    },
+    "filter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "condition"],
+      "properties": {
+        "op": { "const": "filter" },
+        "condition": { "$ref": "#/$defs/condition" }
+      }
+    },
+    "createObject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "path"],
+      "properties": {
+        "op": { "const": "create_object" },
+        "path": { "$ref": "#/$defs/fieldPath" }
+      }
+    },
+    "conditionalField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "path", "condition", "whenTrue", "whenFalse"],
+      "properties": {
+        "op": { "const": "conditional_field" },
+        "path": { "$ref": "#/$defs/fieldPath" },
+        "condition": { "$ref": "#/$defs/condition" },
+        "whenTrue": { "$ref": "#/$defs/typedValue" },
+        "whenFalse": { "$ref": "#/$defs/typedValue" }
+      }
+    },
+    "operation": {
+      "oneOf": [
+        { "$ref": "#/$defs/select" },
+        { "$ref": "#/$defs/rename" },
+        { "$ref": "#/$defs/remove" },
+        { "$ref": "#/$defs/addConstant" },
+        { "$ref": "#/$defs/cast" },
+        { "$ref": "#/$defs/scaleFixedDecimal" },
+        { "$ref": "#/$defs/enumMap" },
+        { "$ref": "#/$defs/filter" },
+        { "$ref": "#/$defs/createObject" },
+        { "$ref": "#/$defs/conditionalField" }
+      ]
+    }
+  }
+}
