@@ -17,6 +17,11 @@
     <dependencies>
         <dependency>
             <groupId>io.streamforge</groupId>
+            <artifactId>common-model</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.streamforge</groupId>
             <artifactId>stp-protocol</artifactId>
             <version>${project.version}</version>
         </dependency>
