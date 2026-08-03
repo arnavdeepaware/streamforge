@@ -19,7 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
  * Creates durable pipeline definitions only; execution is intentionally outside the control plane.
  */
 @Service
-public final class PipelineDefinitionService {
+public class PipelineDefinitionService {
   private final ConfigurationValidator validator;
   private final PipelineDefinitionRepository pipelines;
   private final InputDefinitionRepository inputs;
