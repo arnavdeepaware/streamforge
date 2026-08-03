@@ -44,7 +44,7 @@ public final class SchemaController {
 
   @GetMapping("/{id}")
   @Operation(summary = "Get a schema definition and its latest document revision")
-  public SchemaDefinitionResponse get(@PathVariable UUID id) {
+  public SchemaDefinitionResponse get(@PathVariable("id") UUID id) {
     return schemas.get(id);
   }
 
@@ -57,7 +57,7 @@ public final class SchemaController {
   @PostMapping("/{id}/revisions")
   @Operation(summary = "Create an immutable JSON Schema document revision")
   public ResponseEntity<SchemaDefinitionResponse> createRevision(
-      @PathVariable UUID id, @RequestBody CreateSchemaRevisionRequest request) {
+      @PathVariable("id") UUID id, @RequestBody CreateSchemaRevisionRequest request) {
     SchemaDefinitionResponse updated = schemas.createRevision(id, request);
     return ResponseEntity.created(URI.create("/api/v1/schemas/" + id)).body(updated);
   }
@@ -65,13 +65,13 @@ public final class SchemaController {
   @PatchMapping("/{id}")
   @Operation(summary = "Update mutable schema metadata")
   public SchemaDefinitionResponse updateMetadata(
-      @PathVariable UUID id, @RequestBody UpdateSchemaMetadataRequest request) {
+      @PathVariable("id") UUID id, @RequestBody UpdateSchemaMetadataRequest request) {
     return schemas.updateMetadata(id, request);
   }
 
   @PostMapping("/{id}/archive")
   @Operation(summary = "Archive a schema while preserving all document revisions")
-  public SchemaDefinitionResponse archive(@PathVariable UUID id) {
+  public SchemaDefinitionResponse archive(@PathVariable("id") UUID id) {
     return schemas.archive(id);
   }
 }
