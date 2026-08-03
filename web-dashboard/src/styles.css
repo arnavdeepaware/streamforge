@@ -257,6 +257,158 @@ a:focus-visible {
   padding-left: 1rem;
 }
 
+.run-controls,
+.pipeline-health {
+  background: #fffaf1;
+  border: 1px solid #baad96;
+  box-shadow: 5px 5px 0 #d6c9b0;
+  margin-top: 2rem;
+  padding: 1.25rem;
+}
+
+.run-controls h3,
+.pipeline-health h3,
+.pipeline-health h4 {
+  margin-top: 0;
+}
+
+.run-controls > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.run-controls button {
+  background: #173d32;
+  border: 0;
+  color: #fffaf1;
+  cursor: pointer;
+  font: inherit;
+  padding: 0.65rem 0.9rem;
+}
+
+.run-controls button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.pipeline-health__heading {
+  align-items: start;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.connection-state {
+  color: #56675b;
+  font-family: 'Courier New', monospace;
+  font-size: 0.75rem;
+  font-weight: 700;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.health-summary,
+.counter-grid,
+.dead-letter-detail {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.health-summary,
+.counter-grid {
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  margin: 1rem 0;
+}
+
+.health-summary div,
+.counter-grid div,
+.dead-letter-detail div {
+  border-top: 1px solid #d6c9b0;
+  padding-top: 0.45rem;
+}
+
+.health-summary dt,
+.counter-grid dt,
+.dead-letter-detail dt {
+  color: #56675b;
+  font-family: 'Courier New', monospace;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.health-summary dd,
+.counter-grid dd,
+.dead-letter-detail dd {
+  margin: 0.25rem 0 0;
+}
+
+.counter-grid dd {
+  font-size: 1.35rem;
+  font-weight: 700;
+}
+
+.rate-history,
+.dead-letter-list {
+  border-top: 1px solid #baad96;
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+}
+
+.rate-bars {
+  align-items: end;
+  background: #e6ddca;
+  display: flex;
+  gap: 2px;
+  height: 7rem;
+  overflow: hidden;
+  padding: 0.4rem;
+}
+
+.rate-bars__bar {
+  background: #54806a;
+  flex: 1 1 2px;
+  min-width: 2px;
+}
+
+.dead-letter-list details {
+  border-bottom: 1px solid #d6c9b0;
+  padding: 0.65rem 0;
+}
+
+.dead-letter-list summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.dead-letter-list pre {
+  background: #173d32;
+  color: #fffaf1;
+  max-height: 12rem;
+  overflow: auto;
+  padding: 0.75rem;
+  white-space: pre-wrap;
+}
+
+.download-link {
+  display: inline-block;
+  font-family: 'Courier New', monospace;
+  font-weight: 700;
+  margin-top: 1.25rem;
+  text-underline-offset: 0.2em;
+}
+
+.visually-hidden {
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  position: absolute;
+  width: 1px;
+  clip: rect(0, 0, 0, 0);
+}
+
 .pipeline-wizard {
   max-width: 68rem;
 }

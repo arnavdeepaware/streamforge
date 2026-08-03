@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.streamforge.pipelineruntime.LocalPipelineRunner;
 import io.streamforge.pipelineruntime.PipelineCancellation;
 import io.streamforge.pipelineruntime.PipelineConfigLoader;
+import io.streamforge.pipelineruntime.PipelineRunObserver;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -39,7 +40,21 @@ public final class LocalPipelineExecutionBackend
             Path config = materialize(command);
             try {
               var runConfig = new PipelineConfigLoader().load(config);
-              listener.onCompleted(new LocalPipelineRunner().run(runConfig, cancellation));
+              PipelineRunObserver observer =
+                  new PipelineRunObserver() {
+                    @Override
+                    public void onMetrics(
+                        io.streamforge.pipelineruntime.PipelineRunMetrics metrics) {
+                      listener.onMetrics(metrics);
+                    }
+
+                    @Override
+                    public void onDeadLetter(
+                        io.streamforge.pipelineruntime.deadletter.DeadLetterRecord record) {
+                      listener.onDeadLetter(record);
+                    }
+                  };
+              listener.onCompleted(new LocalPipelineRunner(observer).run(runConfig, cancellation));
             } finally {
               Files.deleteIfExists(config);
               Files.deleteIfExists(config.resolveSibling(config.getFileName() + ".transform.json"));

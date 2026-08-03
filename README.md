@@ -2,15 +2,17 @@
 
 StreamForge is a planned configurable platform for ingesting real-time market data, normalizing it into a canonical event model, applying safe declarative transformations, and delivering it to multiple output formats and transports.
 
-The Java 21 backend Maven reactor includes immutable market-data value types, STP v1 codecs, a deterministic tick simulator, a local TCP generator-to-parser path, streaming JSONL and CSV output sinks, and a local in-process pipeline runner for STP binary, JSONL, and CSV files. The React/Vite dashboard reads pipeline definitions and schema catalog entries from the versioned control-plane API and can create finite STP-binary-to-JSONL definitions with safe declarative presets; graphical editing and operational views remain unimplemented.
+The Java 21 backend Maven reactor includes immutable market-data value types, STP v1 codecs, a deterministic tick simulator, a local TCP generator-to-parser path, streaming JSONL and CSV output sinks, and a local in-process pipeline runner for STP binary, JSONL, and CSV files. The React/Vite dashboard reads pipeline definitions and schema catalog entries from the versioned control-plane API, can create finite STP-binary-to-JSONL definitions with safe declarative presets, and shows bounded local run health and dead-letter summaries; graphical editing remains unimplemented.
 
 The local pipeline runner can also quarantine record-level failures to a staged JSONL dead-letter
 file with deterministic IDs and opt-in, bounded payload capture. Distributed dead-letter handling
 is not implemented.
 
 The control plane is a separate Spring Boot service that persists validated, credential-free
-pipeline definitions and revisions in PostgreSQL. It does not execute pipelines or authenticate
-users. See [`backend/control-plane/README.md`](backend/control-plane/README.md) for local startup.
+pipeline definitions and revisions in PostgreSQL, and runs finite local revisions with bounded
+live monitoring, safe dead-letter summaries, SSE updates, and output downloads. It does not
+authenticate users. See [`docs/mvp-demo.md`](docs/mvp-demo.md) for the local monitoring walkthrough
+and [`backend/control-plane/README.md`](backend/control-plane/README.md) for service startup.
 
 Verify the backend from the repository root:
 

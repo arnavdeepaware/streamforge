@@ -1,7 +1,8 @@
 # Control Plane
 
-`control-plane` is a Spring Boot service that stores versioned pipeline configuration only. It
-does not authenticate users or execute pipelines. PostgreSQL connectivity is supplied only through
+`control-plane` is a Spring Boot service that stores versioned pipeline configuration and executes
+finite local pipeline revisions through the local runtime. It does not authenticate users.
+PostgreSQL connectivity is supplied only through
 `CONTROL_PLANE_DB_URL`, `CONTROL_PLANE_DB_USERNAME`, and `CONTROL_PLANE_DB_PASSWORD` environment
 variables. Flyway migrates an empty database at startup, and health is available at
 `/actuator/health`.
@@ -12,7 +13,9 @@ The service exposes version-one schema and pipeline-definition APIs under `/api/
 `/api/v1/pipelines`. Each resource supports creation, paginated listing, lookup, a validation-only
 endpoint, immutable revision creation, mutable metadata updates, and archival that retains history.
 Pipeline endpoints validate credential-free input/output JSON, safe declarative transformations,
-and output blueprints before persistence; they never start a pipeline. Invalid requests use RFC
+and output blueprints before persistence. Local-run endpoints start and stop finite revisions,
+return bounded monitoring snapshots, stream those snapshots over SSE, expose recent safe
+dead-letter records, and download completed finite output. Invalid requests use RFC
 9457 problem details with an `errors` field containing field-level failures.
 
 The generated OpenAPI document and interactive UI are available after startup at:

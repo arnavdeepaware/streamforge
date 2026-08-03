@@ -7,14 +7,14 @@ public interface PipelineRunObserver {
   PipelineRunObserver NO_OP =
       new PipelineRunObserver() {
         @Override
-        public void onMetrics(PipelineCounters counters) {}
+        public void onMetrics(PipelineRunMetrics metrics) {}
 
         @Override
         public void onDeadLetter(DeadLetterRecord record) {}
       };
 
   /** Receives a nonnegative counter snapshot after processing progress. */
-  void onMetrics(PipelineCounters counters);
+  void onMetrics(PipelineRunMetrics metrics);
 
   /** Receives each locally quarantined dead-letter record after it is durably staged. */
   void onDeadLetter(DeadLetterRecord record);

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.streamforge.controlplane.api.PipelineMonitoringResponse;
 import io.streamforge.controlplane.api.PipelineReportResponse;
 import io.streamforge.controlplane.api.PipelineRunResponse;
 import io.streamforge.controlplane.api.StartPipelineRequest;
@@ -23,11 +24,18 @@ import io.streamforge.controlplane.persistence.repository.PipelineRevisionReposi
 import io.streamforge.controlplane.persistence.repository.PipelineRunRepository;
 import io.streamforge.controlplane.persistence.repository.TransformDefinitionRepository;
 import io.streamforge.pipelineruntime.PipelineReport;
+import io.streamforge.pipelineruntime.PipelineRunMetrics;
+import io.streamforge.pipelineruntime.deadletter.DeadLetterRecord;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.NoSuchElementException;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 /** Coordinates durable lifecycle state with one pluggable execution backend. */
 @Service
@@ -39,6 +47,7 @@ public class PipelineRunService {
   private final OutputDefinitionRepository outputs;
   private final PipelineExecutionBackend backend;
   private final ObjectMapper mapper;
+  private final PipelineRunMonitor monitor;
   private final ConcurrentHashMap<UUID, PipelineExecutionHandle> active = new ConcurrentHashMap<>();
   private final Counter started;
   private final Counter completed;
@@ -52,7 +61,8 @@ public class PipelineRunService {
       OutputDefinitionRepository outputs,
       PipelineExecutionBackend backend,
       ObjectMapper mapper,
-      MeterRegistry metrics) {
+      MeterRegistry metrics,
+      PipelineRunMonitor monitor) {
     this.runs = runs;
     this.revisions = revisions;
     this.inputs = inputs;
@@ -60,6 +70,7 @@ public class PipelineRunService {
     this.outputs = outputs;
     this.backend = backend;
     this.mapper = mapper;
+    this.monitor = monitor;
     started = metrics.counter("streamforge.pipeline.runs", "outcome", "started");
     completed = metrics.counter("streamforge.pipeline.runs", "outcome", "completed");
     failed = metrics.counter("streamforge.pipeline.runs", "outcome", "failed");
@@ -82,8 +93,11 @@ public class PipelineRunService {
           request == null || request.deadLetter() == null ? null : json(request.deadLetter());
       PipelineRunEntity run =
           runs.save(new PipelineRunEntity(pipelineId, revision.id(), deadLetter));
+      monitor.register(run.id(), run.state());
       run.transition(PipelineRunState.VALIDATED, null);
+      monitor.state(run.id(), run.state());
       run.transition(PipelineRunState.STARTING, null);
+      monitor.state(run.id(), run.state());
       PipelineExecutionHandle handle =
           backend.start(
               command(run, revision, request == null ? null : request.deadLetter()),
@@ -104,6 +118,7 @@ public class PipelineRunService {
     if (run.state() != PipelineRunState.RUNNING && run.state() != PipelineRunState.STARTING)
       throw new IllegalStateException("pipeline run is not running");
     run.transition(PipelineRunState.STOPPING, null);
+    monitor.state(runId, run.state());
     PipelineExecutionHandle handle = active.get(pipelineId);
     if (handle == null)
       throw new IllegalStateException("pipeline run has no active execution handle");
@@ -123,6 +138,35 @@ public class PipelineRunService {
         run.id(), run.state(), run.finalReport() == null ? null : tree(run.finalReport()));
   }
 
+  @Transactional(readOnly = true)
+  public PipelineMonitoringResponse monitoring(UUID pipelineId, UUID runId) {
+    PipelineRunEntity run = run(pipelineId, runId);
+    PipelineMonitoringResponse snapshot = monitor.snapshot(runId);
+    return snapshot.state() == run.state() ? snapshot : withState(snapshot, run.state());
+  }
+
+  @Transactional(readOnly = true)
+  public SseEmitter events(UUID pipelineId, UUID runId) {
+    run(pipelineId, runId);
+    return monitor.subscribe(runId);
+  }
+
+  @Transactional(readOnly = true)
+  public Resource output(UUID pipelineId, UUID runId) {
+    PipelineRunEntity run = run(pipelineId, runId);
+    if (run.state().active()) throw new IllegalStateException("pipeline output is not final");
+    PipelineRevisionEntity revision = revisions.findById(run.pipelineRevisionId()).orElseThrow();
+    OutputDefinitionEntity output = outputs.findById(revision.outputDefinitionId()).orElseThrow();
+    JsonNode configuration = tree(output.configuration());
+    JsonNode path = configuration.get("path");
+    if (path == null || !path.isTextual())
+      throw new IllegalStateException("output path is unavailable");
+    Path file = Path.of(path.asText()).toAbsolutePath().normalize();
+    if (!Files.isRegularFile(file))
+      throw new NoSuchElementException("pipeline output is not available");
+    return new FileSystemResource(file);
+  }
+
   @Transactional
   void running(UUID runId) {
     transition(runId, PipelineRunState.RUNNING, null);
@@ -135,6 +179,7 @@ public class PipelineRunService {
     if (run.state() == PipelineRunState.STOPPING || report.cancelled()) run.stop(serialized);
     else run.complete(serialized);
     runs.save(run);
+    monitor.state(runId, run.state());
     completed.increment();
     active.remove(pipelineId);
   }
@@ -144,6 +189,7 @@ public class PipelineRunService {
     PipelineRunEntity run = runs.findById(runId).orElseThrow();
     if (run.state().active()) run.transition(PipelineRunState.FAILED, safe(failure));
     runs.save(run);
+    monitor.state(runId, run.state());
     failed.increment();
     active.remove(pipelineId);
   }
@@ -152,6 +198,7 @@ public class PipelineRunService {
     PipelineRunEntity run = runs.findById(runId).orElseThrow();
     if (run.state().canTransitionTo(state)) run.transition(state, failure);
     runs.save(run);
+    monitor.state(runId, run.state());
   }
 
   private PipelineExecutionCommand command(
@@ -189,6 +236,21 @@ public class PipelineRunService {
         run.failureSummary(),
         run.startedAt(),
         run.finishedAt());
+  }
+
+  private static PipelineMonitoringResponse withState(
+      PipelineMonitoringResponse snapshot, PipelineRunState state) {
+    return new PipelineMonitoringResponse(
+        snapshot.runId(),
+        state,
+        snapshot.counters(),
+        snapshot.eventRatePerSecond(),
+        snapshot.latency(),
+        snapshot.queueDepth(),
+        snapshot.sequenceGapCount(),
+        snapshot.duplicateCount(),
+        snapshot.history(),
+        snapshot.deadLetters());
   }
 
   private String json(Object value) {
@@ -233,6 +295,14 @@ public class PipelineRunService {
 
     public void onFailed(Throwable failure) {
       failed(runId, pipelineId, failure);
+    }
+
+    public void onMetrics(PipelineRunMetrics metrics) {
+      monitor.metrics(runId, metrics);
+    }
+
+    public void onDeadLetter(DeadLetterRecord record) {
+      monitor.deadLetter(runId, record);
     }
   }
 }

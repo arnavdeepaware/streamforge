@@ -81,6 +81,69 @@ export type PipelinePreview = {
   errors: ApiFieldViolation[];
 };
 
+export type PipelineRun = {
+  runId: string;
+  pipelineId: string;
+  revisionId: string;
+  state: PipelineRunState;
+  failureSummary: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+};
+
+export type PipelineRunState =
+  | 'CREATED'
+  | 'VALIDATED'
+  | 'STARTING'
+  | 'RUNNING'
+  | 'STOPPING'
+  | 'STOPPED'
+  | 'COMPLETED'
+  | 'FAILED';
+
+export type MetricSample = {
+  timestamp: string;
+  received: number;
+  emitted: number;
+  failed: number;
+};
+
+export type DeadLetter = {
+  failureId: string;
+  stage: string;
+  category: string;
+  sourceLocation: string;
+  safeMessage: string;
+  retryability: string;
+  timestamp: string;
+  payloadEncoding: string | null;
+  payloadPreview: string | null;
+  payloadTruncated: boolean;
+};
+
+export type PipelineMonitoring = {
+  runId: string;
+  state: PipelineRunState;
+  counters: {
+    received: number;
+    parsed: number;
+    emitted: number;
+    filtered: number;
+    failed: number;
+  };
+  eventRatePerSecond: number;
+  latency: {
+    totalNanos: number;
+    processedEvents: number;
+    averageNanos: number;
+  };
+  queueDepth: number;
+  sequenceGapCount: number;
+  duplicateCount: number;
+  history: MetricSample[];
+  deadLetters: DeadLetter[];
+};
+
 export class ControlPlaneApiError extends Error {
   constructor(
     message: string,
@@ -107,11 +170,47 @@ export const controlPlaneClient = {
     post('/pipelines/validate', { configuration }, parseValidationResult),
   createPipeline: (request: CreatePipelineRequest) =>
     post('/pipelines', request, parsePipelineDefinition),
+  startPipeline: (pipelineId: string) =>
+    post(
+      `/pipelines/${encodeURIComponent(pipelineId)}/runs`,
+      {},
+      parsePipelineRun,
+    ),
+  stopPipeline: (pipelineId: string, runId: string) =>
+    post(
+      `/pipelines/${encodeURIComponent(pipelineId)}/runs/${encodeURIComponent(runId)}/stop`,
+      {},
+      parsePipelineRun,
+    ),
+  getPipelineMonitoring: (pipelineId: string, runId: string) =>
+    get(
+      `/pipelines/${encodeURIComponent(pipelineId)}/runs/${encodeURIComponent(runId)}/monitoring`,
+      parsePipelineMonitoring,
+    ),
+  getDeadLetter: (pipelineId: string, runId: string, failureId: string) =>
+    get(
+      `/pipelines/${encodeURIComponent(pipelineId)}/runs/${encodeURIComponent(runId)}/dead-letters/${encodeURIComponent(failureId)}`,
+      parseDeadLetter,
+    ),
   canonicalFields: () =>
     get('/pipelines/preview/canonical-fields', parseCanonicalFields),
   previewPipeline: (body: JsonObject, signal: AbortSignal) =>
     post('/pipelines/preview', body, parsePreview, signal),
 };
+
+export function pipelineMonitoringEventsUrl(
+  pipelineId: string,
+  runId: string,
+): string {
+  return `${apiBaseUrl}/pipelines/${encodeURIComponent(pipelineId)}/runs/${encodeURIComponent(runId)}/events`;
+}
+
+export function pipelineOutputDownloadUrl(
+  pipelineId: string,
+  runId: string,
+): string {
+  return `${apiBaseUrl}/pipelines/${encodeURIComponent(pipelineId)}/runs/${encodeURIComponent(runId)}/output`;
+}
 
 async function get<T>(path: string, parser: (value: unknown) => T): Promise<T> {
   return request(path, undefined, parser);
@@ -188,6 +287,73 @@ function parsePreview(value: unknown): PipelinePreview {
     transformed: nullableObject(object.transformed),
     output: nullableObject(object.output),
     errors: array(object.errors).map(parseFieldViolation),
+  };
+}
+
+function parsePipelineRun(value: unknown): PipelineRun {
+  const object = record(value);
+  return {
+    runId: string(object.runId),
+    pipelineId: string(object.pipelineId),
+    revisionId: string(object.revisionId),
+    state: pipelineRunState(object.state),
+    failureSummary: nullableString(object.failureSummary),
+    startedAt: nullableString(object.startedAt),
+    finishedAt: nullableString(object.finishedAt),
+  };
+}
+
+export function parsePipelineMonitoring(value: unknown): PipelineMonitoring {
+  const object = record(value);
+  const counters = record(object.counters);
+  const latency = record(object.latency);
+  return {
+    runId: string(object.runId),
+    state: pipelineRunState(object.state),
+    counters: {
+      received: number(counters.received),
+      parsed: number(counters.parsed),
+      emitted: number(counters.emitted),
+      filtered: number(counters.filtered),
+      failed: number(counters.failed),
+    },
+    eventRatePerSecond: number(object.eventRatePerSecond),
+    latency: {
+      totalNanos: number(latency.totalNanos),
+      processedEvents: number(latency.processedEvents),
+      averageNanos: number(latency.averageNanos),
+    },
+    queueDepth: number(object.queueDepth),
+    sequenceGapCount: number(object.sequenceGapCount),
+    duplicateCount: number(object.duplicateCount),
+    history: array(object.history).map(parseMetricSample),
+    deadLetters: array(object.deadLetters).map(parseDeadLetter),
+  };
+}
+
+function parseMetricSample(value: unknown): MetricSample {
+  const object = record(value);
+  return {
+    timestamp: string(object.timestamp),
+    received: number(object.received),
+    emitted: number(object.emitted),
+    failed: number(object.failed),
+  };
+}
+
+function parseDeadLetter(value: unknown): DeadLetter {
+  const object = record(value);
+  return {
+    failureId: string(object.failureId),
+    stage: string(object.stage),
+    category: string(object.category),
+    sourceLocation: string(object.sourceLocation),
+    safeMessage: string(object.safeMessage),
+    retryability: string(object.retryability),
+    timestamp: string(object.timestamp),
+    payloadEncoding: nullableString(object.payloadEncoding),
+    payloadPreview: nullableString(object.payloadPreview),
+    payloadTruncated: boolean(object.payloadTruncated),
   };
 }
 
@@ -306,6 +472,28 @@ function array(value: unknown): unknown[] {
 function string(value: unknown): string {
   if (typeof value !== 'string') throw new TypeError('Expected a string.');
   return value;
+}
+
+function nullableString(value: unknown): string | null {
+  return value === null ? null : string(value);
+}
+
+function pipelineRunState(value: unknown): PipelineRunState {
+  const state = string(value);
+  if (
+    ![
+      'CREATED',
+      'VALIDATED',
+      'STARTING',
+      'RUNNING',
+      'STOPPING',
+      'STOPPED',
+      'COMPLETED',
+      'FAILED',
+    ].includes(state)
+  )
+    throw new TypeError('Expected a pipeline run state.');
+  return state as PipelineRunState;
 }
 
 function number(value: unknown): number {
