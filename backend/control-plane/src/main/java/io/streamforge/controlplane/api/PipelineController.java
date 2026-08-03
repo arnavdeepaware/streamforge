@@ -49,7 +49,7 @@ public final class PipelineController {
 
   @GetMapping("/{id}")
   @Operation(summary = "Get a pipeline definition and its latest revision")
-  public PipelineDefinitionResponse get(@PathVariable UUID id) {
+  public PipelineDefinitionResponse get(@PathVariable("id") UUID id) {
     return pipelines.get(id);
   }
 
@@ -62,7 +62,7 @@ public final class PipelineController {
   @PostMapping("/{id}/revisions")
   @Operation(summary = "Create an immutable pipeline configuration revision")
   public ResponseEntity<PipelineDefinitionResponse> createRevision(
-      @PathVariable UUID id, @RequestBody CreatePipelineRevisionRequest request) {
+      @PathVariable("id") UUID id, @RequestBody CreatePipelineRevisionRequest request) {
     PipelineDefinitionResponse updated = pipelines.createRevision(id, request);
     return ResponseEntity.created(URI.create("/api/v1/pipelines/" + id)).body(updated);
   }
@@ -70,45 +70,47 @@ public final class PipelineController {
   @PatchMapping("/{id}")
   @Operation(summary = "Update mutable pipeline metadata")
   public PipelineDefinitionResponse updateMetadata(
-      @PathVariable UUID id, @RequestBody UpdatePipelineMetadataRequest request) {
+      @PathVariable("id") UUID id, @RequestBody UpdatePipelineMetadataRequest request) {
     return pipelines.updateMetadata(id, request);
   }
 
   @PostMapping("/{id}/archive")
   @Operation(summary = "Archive a pipeline while preserving all revisions")
-  public PipelineDefinitionResponse archive(@PathVariable UUID id) {
+  public PipelineDefinitionResponse archive(@PathVariable("id") UUID id) {
     return pipelines.archive(id);
   }
 
   @PostMapping("/{id}/runs")
   @Operation(summary = "Start the latest immutable pipeline revision locally")
   public ResponseEntity<PipelineRunResponse> start(
-      @PathVariable UUID id, @RequestBody(required = false) StartPipelineRequest request) {
+      @PathVariable("id") UUID id, @RequestBody(required = false) StartPipelineRequest request) {
     PipelineRunResponse run = runs.start(id, request);
     return ResponseEntity.accepted().body(run);
   }
 
   @PostMapping("/{id}/runs/{runId}/stop")
   @Operation(summary = "Request graceful cancellation of a running pipeline")
-  public PipelineRunResponse stop(@PathVariable UUID id, @PathVariable UUID runId) {
+  public PipelineRunResponse stop(@PathVariable("id") UUID id, @PathVariable("runId") UUID runId) {
     return runs.stop(id, runId);
   }
 
   @GetMapping("/{id}/runs/{runId}")
   @Operation(summary = "Get current pipeline run status")
-  public PipelineRunResponse status(@PathVariable UUID id, @PathVariable UUID runId) {
+  public PipelineRunResponse status(
+      @PathVariable("id") UUID id, @PathVariable("runId") UUID runId) {
     return runs.status(id, runId);
   }
 
   @GetMapping("/{id}/runs/{runId}/report")
   @Operation(summary = "Get the final pipeline run report")
-  public PipelineReportResponse report(@PathVariable UUID id, @PathVariable UUID runId) {
+  public PipelineReportResponse report(
+      @PathVariable("id") UUID id, @PathVariable("runId") UUID runId) {
     return runs.report(id, runId);
   }
 
   @GetMapping(path = "/{id}/runs/{runId}/events", produces = "text/event-stream")
   @Operation(summary = "Stream current pipeline status and final report availability over SSE")
-  public SseEmitter events(@PathVariable UUID id, @PathVariable UUID runId) {
+  public SseEmitter events(@PathVariable("id") UUID id, @PathVariable("runId") UUID runId) {
     SseEmitter emitter = new SseEmitter(0L);
     try {
       PipelineRunResponse status = runs.status(id, runId);
