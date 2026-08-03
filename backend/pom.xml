@@ -14,6 +14,7 @@
     <modules>
         <module>common-model</module>
         <module>stp-protocol</module>
+        <module>stp-benchmarks</module>
         <module>tick-simulator</module>
         <module>parser-engine</module>
         <module>transform-engine</module>
@@ -33,6 +34,8 @@
         <maven.wrapper.plugin.version>3.3.2</maven.wrapper.plugin.version>
         <spotless.maven.plugin.version>2.44.3</spotless.maven.plugin.version>
         <google.java.format.version>1.35.0</google.java.format.version>
+        <jmh.version>1.37</jmh.version>
+        <maven.shade.plugin.version>3.6.0</maven.shade.plugin.version>
     </properties>
 
     <dependencyManagement>
@@ -47,6 +50,16 @@
                 <artifactId>assertj-core</artifactId>
                 <version>${assertj.version}</version>
             </dependency>
+            <dependency>
+                <groupId>org.openjdk.jmh</groupId>
+                <artifactId>jmh-core</artifactId>
+                <version>${jmh.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.openjdk.jmh</groupId>
+                <artifactId>jmh-generator-annprocess</artifactId>
+                <version>${jmh.version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -57,6 +70,11 @@
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-wrapper-plugin</artifactId>
                     <version>${maven.wrapper.plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-shade-plugin</artifactId>
+                    <version>${maven.shade.plugin.version}</version>
                 </plugin>
             </plugins>
         </pluginManagement>

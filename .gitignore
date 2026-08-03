@@ -24,3 +24,6 @@ coverage/
 *.log
 tmp/
 *.tmp
+
+# Local benchmark measurements
+tests/performance/results/
