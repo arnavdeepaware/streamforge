@@ -145,6 +145,7 @@ public final class LocalPipelineRunner {
             DeadLetterCategory.OUTPUT,
             Retryability.RETRYABLE,
             Optional.empty());
+        state.markTerminalFailure();
         deadLetters.complete();
         return state.report(cancellation.isCancelled());
       }
@@ -160,9 +161,11 @@ public final class LocalPipelineRunner {
       } catch (IOException exception) {
         state.recordTerminal(
             PipelineStage.INPUT, config.input().path().toString(), detail(exception));
+        state.markTerminalFailure();
         sink.abort();
       } catch (OutputSinkException exception) {
         state.recordTerminal(PipelineStage.OUTPUT, "output", detail(exception));
+        state.markTerminalFailure();
         sink.abort();
       }
       deadLetters.complete();
@@ -521,6 +524,7 @@ public final class LocalPipelineRunner {
             DeadLetterCategory.OUTPUT,
             Retryability.RETRYABLE,
             state.captureText(sourceText));
+        state.markTerminalFailure();
         throw Stopped.INSTANCE;
       }
     } finally {
@@ -549,6 +553,7 @@ public final class LocalPipelineRunner {
       Retryability retryability,
       Optional<DeadLetterPayload> payload) {
     if (state.record(stage, location, eventId, detail, category, retryability, payload)) {
+      state.markTerminalFailure();
       throw Stopped.INSTANCE;
     }
   }
@@ -576,6 +581,7 @@ public final class LocalPipelineRunner {
     private long processedEventCount;
     private long sequenceGapCount;
     private long duplicateCount;
+    private boolean terminalFailure;
     private final int maximumFailures;
     private final PipelineIdentity identity;
     private final Optional<DeadLetterConfig> deadLetterConfig;
@@ -698,6 +704,10 @@ public final class LocalPipelineRunner {
       processedEventCount++;
     }
 
+    private void markTerminalFailure() {
+      terminalFailure = true;
+    }
+
     private void publishMetrics() {
       try {
         observer.onMetrics(
@@ -738,7 +748,9 @@ public final class LocalPipelineRunner {
           new PipelineCounters(received, parsed, normalized, filtered, emitted, failed),
           failures,
           suppressedFailures,
-          cancelled);
+          cancelled
+              ? PipelineOutcome.CANCELLED
+              : terminalFailure ? PipelineOutcome.FAILED : PipelineOutcome.COMPLETED);
     }
   }
 

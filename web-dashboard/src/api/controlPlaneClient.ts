@@ -1,8 +1,18 @@
+import {
+  isLosslessNumber,
+  isSafeNumber,
+  LosslessNumber,
+  parse as parseLosslessJson,
+  stringify as stringifyLosslessJson,
+} from 'lossless-json';
+
+export type ExactInteger = number | LosslessNumber;
+
 export type PageResponse<T> = {
   items: T[];
   page: number;
   size: number;
-  totalItems: number;
+  totalItems: ExactInteger;
   totalPages: number;
 };
 
@@ -62,7 +72,7 @@ export type PipelineValidationResult = {
 };
 
 export type JsonValue =
-  string | number | boolean | null | JsonObject | JsonValue[];
+  string | number | LosslessNumber | boolean | null | JsonObject | JsonValue[];
 
 export type JsonObject = {
   [key: string]: JsonValue;
@@ -103,9 +113,9 @@ export type PipelineRunState =
 
 export type MetricSample = {
   timestamp: string;
-  received: number;
-  emitted: number;
-  failed: number;
+  received: ExactInteger;
+  emitted: ExactInteger;
+  failed: ExactInteger;
 };
 
 export type DeadLetter = {
@@ -125,23 +135,24 @@ export type PipelineMonitoring = {
   runId: string;
   state: PipelineRunState;
   counters: {
-    received: number;
-    parsed: number;
-    emitted: number;
-    filtered: number;
-    failed: number;
+    received: ExactInteger;
+    parsed: ExactInteger;
+    emitted: ExactInteger;
+    filtered: ExactInteger;
+    failed: ExactInteger;
   };
   eventRatePerSecond: number;
   latency: {
-    totalNanos: number;
-    processedEvents: number;
-    averageNanos: number;
+    totalNanos: ExactInteger;
+    processedEvents: ExactInteger;
+    averageNanos: ExactInteger;
   };
-  queueDepth: number;
-  sequenceGapCount: number;
-  duplicateCount: number;
+  queueDepth: ExactInteger;
+  sequenceGapCount: ExactInteger;
+  duplicateCount: ExactInteger;
   history: MetricSample[];
   deadLetters: DeadLetter[];
+  outputAvailable: boolean;
 };
 
 export class ControlPlaneApiError extends Error {
@@ -159,13 +170,15 @@ const configuredApiUrl = import.meta.env.VITE_CONTROL_PLANE_API_URL?.trim();
 const apiBaseUrl = (configuredApiUrl || '/api/v1').replace(/\/$/, '');
 
 export const controlPlaneClient = {
-  listPipelines: () => get('/pipelines', parsePipelinePage),
+  listPipelines: (page = 0, size = 20) =>
+    get(`/pipelines?page=${page}&size=${size}`, parsePipelinePage),
   getPipeline: (pipelineId: string) =>
     get(
       `/pipelines/${encodeURIComponent(pipelineId)}`,
       parsePipelineDefinition,
     ),
-  listSchemas: () => get('/schemas', parseSchemaPage),
+  listSchemas: (page = 0, size = 20) =>
+    get(`/schemas?page=${page}&size=${size}`, parseSchemaPage),
   validatePipeline: (configuration: PipelineConfiguration) =>
     post('/pipelines/validate', { configuration }, parseValidationResult),
   createPipeline: (request: CreatePipelineRequest) =>
@@ -180,6 +193,11 @@ export const controlPlaneClient = {
     post(
       `/pipelines/${encodeURIComponent(pipelineId)}/runs/${encodeURIComponent(runId)}/stop`,
       {},
+      parsePipelineRun,
+    ),
+  getLatestPipelineRun: (pipelineId: string) =>
+    getOptional(
+      `/pipelines/${encodeURIComponent(pipelineId)}/runs/latest`,
       parsePipelineRun,
     ),
   getPipelineMonitoring: (pipelineId: string, runId: string) =>
@@ -216,6 +234,15 @@ async function get<T>(path: string, parser: (value: unknown) => T): Promise<T> {
   return request(path, undefined, parser);
 }
 
+async function getOptional<T>(
+  path: string,
+  parser: (value: unknown) => T,
+): Promise<T | null> {
+  return request(path, undefined, (value) =>
+    value === undefined ? null : parser(value),
+  );
+}
+
 async function post<T>(
   path: string,
   body: unknown,
@@ -239,17 +266,21 @@ async function request<T>(
         body === undefined
           ? { Accept: 'application/json' }
           : { Accept: 'application/json', 'Content-Type': 'application/json' },
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: body === undefined ? undefined : exactJsonStringify(body),
       signal,
     });
-  } catch {
+  } catch (error: unknown) {
+    if (isAbortError(error)) throw error;
     throw new ControlPlaneApiError(
       'The control-plane API could not be reached.',
       0,
     );
   }
 
-  const responseBody = await response.json().catch(() => undefined);
+  const responseText = await response.text();
+  const responseBody = responseText.trim()
+    ? safelyParseExactJson(responseText)
+    : undefined;
   if (!response.ok) {
     throw new ControlPlaneApiError(
       problemDetail(responseBody, response.statusText),
@@ -311,23 +342,24 @@ export function parsePipelineMonitoring(value: unknown): PipelineMonitoring {
     runId: string(object.runId),
     state: pipelineRunState(object.state),
     counters: {
-      received: number(counters.received),
-      parsed: number(counters.parsed),
-      emitted: number(counters.emitted),
-      filtered: number(counters.filtered),
-      failed: number(counters.failed),
+      received: exactInteger(counters.received),
+      parsed: exactInteger(counters.parsed),
+      emitted: exactInteger(counters.emitted),
+      filtered: exactInteger(counters.filtered),
+      failed: exactInteger(counters.failed),
     },
     eventRatePerSecond: number(object.eventRatePerSecond),
     latency: {
-      totalNanos: number(latency.totalNanos),
-      processedEvents: number(latency.processedEvents),
-      averageNanos: number(latency.averageNanos),
+      totalNanos: exactInteger(latency.totalNanos),
+      processedEvents: exactInteger(latency.processedEvents),
+      averageNanos: exactInteger(latency.averageNanos),
     },
-    queueDepth: number(object.queueDepth),
-    sequenceGapCount: number(object.sequenceGapCount),
-    duplicateCount: number(object.duplicateCount),
-    history: array(object.history).map(parseMetricSample),
+    queueDepth: exactInteger(object.queueDepth),
+    sequenceGapCount: exactInteger(object.sequenceGapCount),
+    duplicateCount: exactInteger(object.duplicateCount),
+    history: array(object.history).map(parseMetricSample).slice(-120),
     deadLetters: array(object.deadLetters).map(parseDeadLetter),
+    outputAvailable: boolean(object.outputAvailable),
   };
 }
 
@@ -335,9 +367,9 @@ function parseMetricSample(value: unknown): MetricSample {
   const object = record(value);
   return {
     timestamp: string(object.timestamp),
-    received: number(object.received),
-    emitted: number(object.emitted),
-    failed: number(object.failed),
+    received: exactInteger(object.received),
+    emitted: exactInteger(object.emitted),
+    failed: exactInteger(object.failed),
   };
 }
 
@@ -388,7 +420,7 @@ function parsePage<T>(
     items,
     page: number(object.page),
     size: number(object.size),
-    totalItems: number(object.totalItems),
+    totalItems: exactInteger(object.totalItems),
     totalPages: number(object.totalPages),
   };
 }
@@ -501,6 +533,54 @@ function number(value: unknown): number {
     throw new TypeError('Expected a finite number.');
   }
   return value;
+}
+
+function exactInteger(value: unknown): ExactInteger {
+  if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) {
+    return value;
+  }
+  if (isLosslessNumber(value) && /^\d+$/.test(value.value)) return value;
+  throw new TypeError('Expected a nonnegative exact integer.');
+}
+
+export function exactIntegerText(value: ExactInteger): string {
+  return isLosslessNumber(value) ? value.value : String(value);
+}
+
+export function exactIntegerBigInt(value: ExactInteger): bigint {
+  return BigInt(exactIntegerText(value));
+}
+
+export function exactJsonParse(text: string): unknown {
+  return parseLosslessJson(text, null, (value) =>
+    isSafeNumber(value, { approx: false })
+      ? Number(value)
+      : new LosslessNumber(value),
+  );
+}
+
+export function exactJsonStringify(value: unknown, space?: number): string {
+  const serialized = stringifyLosslessJson(value, null, space);
+  if (serialized === undefined)
+    throw new TypeError('Value is not JSON serializable.');
+  return serialized;
+}
+
+function safelyParseExactJson(text: string): unknown {
+  try {
+    return exactJsonParse(text);
+  } catch {
+    return undefined;
+  }
+}
+
+function isAbortError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'name' in error &&
+    error.name === 'AbortError'
+  );
 }
 
 function boolean(value: unknown): boolean {

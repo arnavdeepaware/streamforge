@@ -33,6 +33,7 @@ class LocalDeadLetterHandlingTest {
     PipelineReport report = run(jsonInput(input), deadLetters, Optional.empty(), 64);
 
     assertThat(report.counters()).isEqualTo(new PipelineCounters(2, 1, 1, 0, 1, 1));
+    assertThat(report.outcome()).isEqualTo(PipelineOutcome.COMPLETED);
     String record = Files.readString(deadLetters);
     assertThat(record)
         .contains("\"category\":\"MALFORMED_INPUT\"")
@@ -115,6 +116,7 @@ class LocalDeadLetterHandlingTest {
     PipelineReport report = runner().run(config, new PipelineCancellation());
 
     assertThat(report.counters().failed()).isEqualTo(1);
+    assertThat(report.outcome()).isEqualTo(PipelineOutcome.FAILED);
     assertThat(Files.readString(deadLetters))
         .contains("\"category\":\"OUTPUT\"")
         .contains("\"retryability\":\"RETRYABLE\"");
@@ -146,7 +148,9 @@ class LocalDeadLetterHandlingTest {
     PipelineReport stopped = runner().run(failFast, new PipelineCancellation());
 
     assertThat(skipped.counters()).isEqualTo(new PipelineCounters(2, 1, 1, 0, 1, 1));
+    assertThat(skipped.outcome()).isEqualTo(PipelineOutcome.COMPLETED);
     assertThat(stopped.counters()).isEqualTo(new PipelineCounters(1, 0, 0, 0, 0, 1));
+    assertThat(stopped.outcome()).isEqualTo(PipelineOutcome.FAILED);
   }
 
   private PipelineReport run(PipelineInput input, Path deadLetters, Optional<Path> transformation)

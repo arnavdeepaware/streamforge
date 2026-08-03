@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import type { JsonObject, PipelinePreview } from '../../api/controlPlaneClient';
-import { controlPlaneClient } from '../../api/controlPlaneClient';
+import {
+  controlPlaneClient,
+  exactJsonStringify,
+} from '../../api/controlPlaneClient';
 import { useCanonicalFields } from '../../api/queries';
 import { ErrorState, LoadingState } from '../../components/AsyncState';
 import { PageHeader } from '../../components/PageHeader';
@@ -48,11 +51,22 @@ export function FieldMapperPage() {
   const [mapSide, setMapSide] = useState(false);
   const [preview, setPreview] = useState<PipelinePreview | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [mappingError, setMappingError] = useState<string | null>(null);
+  const constantError = pathError(constantPath);
 
   useEffect(() => {
     const controller = new AbortController();
     const transform = buildTransform(filterBuy, mapSide);
-    const blueprint = buildBlueprint(mappings, constantPath, constantValue);
+    let blueprint: JsonObject;
+    try {
+      if (constantError !== null) throw new Error(constantError);
+      blueprint = buildBlueprint(mappings, constantPath, constantValue);
+    } catch (error: unknown) {
+      setPreviewError(
+        error instanceof Error ? error.message : 'Output paths are invalid.',
+      );
+      return () => controller.abort();
+    }
     const timeout = window.setTimeout(() => {
       controlPlaneClient
         .previewPipeline(
@@ -74,7 +88,14 @@ export function FieldMapperPage() {
       window.clearTimeout(timeout);
       controller.abort();
     };
-  }, [constantPath, constantValue, filterBuy, mapSide, mappings]);
+  }, [
+    constantError,
+    constantPath,
+    constantValue,
+    filterBuy,
+    mapSide,
+    mappings,
+  ]);
 
   if (fields.isPending) return <LoadingState title="Field mapper is loading" />;
   if (fields.isError)
@@ -119,11 +140,23 @@ export function FieldMapperPage() {
           <label>
             Destination path
             <input
+              aria-describedby={
+                mappingError ? 'destination-path-error' : undefined
+              }
+              aria-invalid={mappingError !== null}
               aria-label="Destination path"
-              onChange={(event) => setDestination(event.target.value)}
+              onChange={(event) => {
+                setDestination(event.target.value);
+                setMappingError(null);
+              }}
               value={destination}
             />
           </label>
+          {mappingError ? (
+            <p className="field-error" id="destination-path-error" role="alert">
+              {mappingError}
+            </p>
+          ) : null}
           <label>
             Formatting
             <select
@@ -138,15 +171,7 @@ export function FieldMapperPage() {
               <option value="TIMESTAMP_ISO_UTC">ISO timestamp</option>
             </select>
           </label>
-          <button
-            onClick={() =>
-              setMappings((current) => [
-                ...current,
-                { source: selected, destination, format },
-              ])
-            }
-            type="button"
-          >
+          <button onClick={() => addMapping()} type="button">
             Add mapped field
           </button>
           <ul>
@@ -173,11 +198,20 @@ export function FieldMapperPage() {
           <label>
             Constant path
             <input
+              aria-describedby={
+                constantError ? 'constant-path-error' : undefined
+              }
+              aria-invalid={constantError !== null}
               aria-label="Constant path"
               onChange={(event) => setConstantPath(event.target.value)}
               value={constantPath}
             />
           </label>
+          {constantError ? (
+            <p className="field-error" id="constant-path-error" role="alert">
+              {constantError}
+            </p>
+          ) : null}
           <label>
             Constant value
             <input
@@ -211,6 +245,24 @@ export function FieldMapperPage() {
       </div>
     </section>
   );
+
+  function addMapping() {
+    const invalid = pathError(destination);
+    if (invalid !== null) {
+      setMappingError(invalid);
+      return;
+    }
+    const next = [...mappings, { source: selected, destination, format }];
+    try {
+      buildBlueprint(next, constantPath, constantValue);
+      setMappings(next);
+      setMappingError(null);
+    } catch (error: unknown) {
+      setMappingError(
+        error instanceof Error ? error.message : 'Destination path conflicts.',
+      );
+    }
+  }
 }
 
 function PreviewPanel({
@@ -252,7 +304,7 @@ function Json({ title, value }: { title: string; value: JsonObject | null }) {
   return (
     <>
       <h4>{title}</h4>
-      <pre>{value === null ? '—' : JSON.stringify(value, null, 2)}</pre>
+      <pre>{value === null ? '—' : exactJsonStringify(value, 2)}</pre>
     </>
   );
 }
@@ -314,19 +366,31 @@ function add(
   value: JsonObject,
 ): void {
   const [head, ...tail] = parts;
-  if (!head || !/^[A-Za-z][A-Za-z0-9_]*$/.test(head)) return;
+  if (!head || !/^[A-Za-z][A-Za-z0-9_]*$/.test(head))
+    throw new Error('Paths must use dot-separated identifier segments.');
   if (tail.length === 0) {
+    if (fields[head] !== undefined)
+      throw new Error(`Destination path collides at "${parts.join('.')}".`);
     fields[head] = value;
     return;
   }
   const current = fields[head];
-  if (
-    !current ||
+  if (!current) {
+    fields[head] = { kind: 'object', fields: {} };
+  } else if (
     current.kind !== 'object' ||
     typeof current.fields !== 'object' ||
     current.fields === null ||
     Array.isArray(current.fields)
-  )
-    fields[head] = { kind: 'object', fields: {} };
+  ) {
+    throw new Error(`Destination path collides at "${head}".`);
+  }
   add(fields[head].fields as Record<string, JsonObject>, tail, value);
+}
+
+function pathError(path: string): string | null {
+  if (!path.trim()) return 'A destination path is required.';
+  return path.split('.').every((part) => /^[A-Za-z][A-Za-z0-9_]*$/.test(part))
+    ? null
+    : 'Paths must use dot-separated identifier segments.';
 }

@@ -7,10 +7,10 @@ import type {
   PipelineConfiguration,
 } from '../../api/controlPlaneClient';
 import {
-  controlPlaneQueryKeys,
-  usePipelineCreation,
-  usePipelineValidation,
-} from '../../api/queries';
+  exactJsonParse,
+  exactJsonStringify,
+} from '../../api/controlPlaneClient';
+import { usePipelineCreation, usePipelineValidation } from '../../api/queries';
 import { PageHeader } from '../../components/PageHeader';
 import { TextField, WizardSteps } from './WizardControls';
 
@@ -117,7 +117,7 @@ export function PipelineCreationPage() {
         configuration,
       });
       await queryClient.invalidateQueries({
-        queryKey: controlPlaneQueryKeys.pipelines,
+        queryKey: ['pipelines'],
       });
       navigate('/pipelines');
       return saved;
@@ -417,13 +417,12 @@ type ReviewStepProps = {
 };
 
 function ReviewStep(props: ReviewStepProps) {
-  const exported = JSON.stringify(
+  const exported = exactJsonStringify(
     {
       name: props.draft.name,
       description: props.draft.description,
       configuration: props.configuration,
     },
-    null,
     2,
   );
   return (
@@ -679,7 +678,7 @@ function downloadConfiguration(value: string) {
 }
 
 function parseImportedDraft(value: string): PipelineDraft {
-  const root = asRecord(JSON.parse(value));
+  const root = asRecord(exactJsonParse(value));
   const configuration = asRecord(root.configuration);
   const input = asRecord(configuration.input);
   const output = asRecord(configuration.output);
@@ -690,7 +689,10 @@ function parseImportedDraft(value: string): PipelineDraft {
       'The imported input and output types are not supported by this guided flow.',
     );
   }
-  if (JSON.stringify(blueprint) !== JSON.stringify(canonicalEventBlueprint())) {
+  if (
+    exactJsonStringify(blueprint) !==
+    exactJsonStringify(canonicalEventBlueprint())
+  ) {
     throw new Error(
       'The imported output blueprint is not supported by this guided flow.',
     );

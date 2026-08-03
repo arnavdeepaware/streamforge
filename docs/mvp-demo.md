@@ -1,15 +1,16 @@
 # MVP Monitoring Demo
 
-`scripts/run-mvp-demo.sh` starts PostgreSQL, the control plane, and the Vite dashboard; creates a
-finite STP-to-JSONL pipeline; generates deterministic simulated STP frames; and starts the run. It
-uses the local pipeline runtime's streaming file reader, not Kafka or a TCP pipeline input.
+`scripts/run-mvp-demo.sh` is a self-checking local demonstration of PostgreSQL, the control plane,
+the Vite dashboard, deterministic STP generation, managed pipeline execution, quarantine, and
+finite output download. It uses the local streaming file runner; Kafka and TCP pipeline inputs are
+not involved.
 
 ## Prerequisites
 
 - Docker Desktop or another Docker-compatible daemon
 - JDK 21 through 26
 - Node.js compatible with `web-dashboard/package.json`
-- `curl`, `sed`, and a POSIX-compatible shell
+- `curl`, `sed`, `wc`, and a POSIX-compatible shell
 
 ## Run
 
@@ -19,27 +20,44 @@ From the repository root:
 ./scripts/run-mvp-demo.sh
 ```
 
-The script creates a temporary directory and prints its path, the pipeline ID, run ID, output file,
-dead-letter file, and service PIDs. It deliberately appends a zero-length STP frame after 10,000
-valid deterministic simulator frames. The valid frames are written to the JSONL output; the final
-malformed frame is quarantined to the printed dead-letter JSONL file.
+The script creates isolated temporary input, workspace, and artifact roots. It waits for
+PostgreSQL, the control-plane health endpoint, and the dashboard before creating a pipeline. The
+pipeline reads `ticks.stp` relative to the managed input root and writes its output and dead-letter
+data beneath a server-owned run directory in the managed artifact root.
 
-Open the printed dashboard URL. On the pipeline detail page, the **Pipeline health** panel shows
-lifecycle state, received/parsed/emitted/filtered/failed counters, integer event rate, integer
-nanosecond latency summary, direct-backpressure queue depth (`0`), sequence gaps, duplicates, and
-the bounded received-event history. Expand **Recent dead-letter events** to inspect the safe,
-payload-bounded preview for the intentional malformed frame. The finite output is downloadable
-once the run is complete.
+The generated input contains 10,000 valid deterministic STP frames followed by one malformed
+zero-length frame. The script waits up to two minutes for a terminal state and fails unless all of
+these assertions hold:
 
-The server emits monitoring snapshots over SSE. The dashboard reconnects with capped exponential
-backoff if that connection is interrupted; it does not retain raw events in the browser.
+- lifecycle state is `COMPLETED`;
+- emitted count is `10,000` and failed count is `1`;
+- exactly one recent dead-letter summary is available;
+- output is downloadable and contains exactly `10,000` JSONL lines.
 
-When finished, use the exact stop command printed by the script. The script does not remove its
-temporary directory so that output and dead-letter files remain available for inspection.
+On success, the script leaves the services running and prints the pipeline page, run ID, download
+endpoint, artifact root, service logs, and an exact shutdown command. On setup or verification
+failure, it exits nonzero and stops child services and the Compose stack; logs remain in the
+printed temporary directory.
 
-## Current Boundaries
+## Monitoring
 
-This is a local single-node demonstration. Monitoring history and recent dead-letter summaries are
-bounded in memory for the current control-plane process; durable run lifecycle and final counters
-remain in PostgreSQL. Redis, Kafka, remote workers, and distributed dead-letter storage are not
-part of this MVP demo.
+The pipeline detail page restores the latest run, including terminal runs after a control-plane
+restart. It displays lifecycle state, exact counters, event rate, integer nanosecond latency,
+direct-backpressure queue depth (`0`), sequence anomalies, and recent safe dead-letter summaries.
+The output link appears only when the run completed and the managed artifact still exists.
+
+SSE delivery is decoupled from pipeline processing and reconnects with capped exponential backoff.
+The server retains all active observations plus at most 100 terminal observations for 24 hours.
+The browser keeps at most 120 metric snapshots. Historical rate samples are not persisted; after a
+restart, final counters and at most 50 recent managed dead-letter summaries are restored while rate
+history starts empty.
+
+## Boundaries
+
+The control plane is unauthenticated and intended only for local use. HTTP-started pipelines may
+only read files beneath `STREAMFORGE_LOCAL_PIPELINE_INPUT_ROOT`. Outputs and quarantine records are
+server-owned beneath `STREAMFORGE_LOCAL_PIPELINE_ARTIFACT_ROOT`; host-absolute paths are neither
+persisted nor returned. CLI-only pipeline execution still accepts explicit local paths.
+
+Redis, Kafka, authentication, remote workers, and distributed artifact storage are outside this
+MVP.

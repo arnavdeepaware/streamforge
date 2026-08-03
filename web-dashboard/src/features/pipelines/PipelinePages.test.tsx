@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw';
-import { screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { renderDashboard } from '../../test/renderDashboard';
 import { server } from '../../test/server';
@@ -91,6 +91,33 @@ describe('pipeline dashboard pages', () => {
     ).toBeInTheDocument();
   });
 
+  it('requests 20-item pages and exposes accessible previous and next controls', async () => {
+    server.use(
+      http.get('*/api/v1/pipelines', ({ request }) => {
+        const page = Number(new URL(request.url).searchParams.get('page'));
+        return HttpResponse.json({
+          items: [
+            { ...pipeline, id: `pipeline-${page}`, name: `Page ${page + 1}` },
+          ],
+          page,
+          size: 20,
+          totalItems: 41,
+          totalPages: 3,
+        });
+      }),
+    );
+
+    renderDashboard('/pipelines?page=2');
+    expect(
+      await screen.findByRole('link', { name: 'Page 2' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Page 2 of 3')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Previous' }));
+    expect(
+      await screen.findByRole('link', { name: 'Page 1' }),
+    ).toBeInTheDocument();
+  });
+
   it('renders a pipeline definition from the API', async () => {
     server.use(
       http.get(`*/api/v1/pipelines/${pipeline.id}`, () =>
@@ -103,6 +130,10 @@ describe('pipeline dashboard pages', () => {
             createdAt: '2026-08-03T13:00:00Z',
           },
         }),
+      ),
+      http.get(
+        `*/api/v1/pipelines/${pipeline.id}/runs/latest`,
+        () => new HttpResponse(null, { status: 204 }),
       ),
     );
 
@@ -136,6 +167,10 @@ describe('pipeline dashboard pages', () => {
             createdAt: '2026-08-03T13:00:00Z',
           },
         }),
+      ),
+      http.get(
+        `*/api/v1/pipelines/${pipeline.id}/runs/latest`,
+        () => new HttpResponse(null, { status: 204 }),
       ),
       http.post(`*/api/v1/pipelines/${pipeline.id}/runs`, () =>
         HttpResponse.json({
@@ -179,6 +214,7 @@ describe('pipeline dashboard pages', () => {
               payloadTruncated: false,
             },
           ],
+          outputAvailable: false,
         }),
       ),
     );
@@ -190,6 +226,75 @@ describe('pipeline dashboard pages', () => {
     expect(await screen.findByText('Pipeline health')).toBeInTheDocument();
     expect(screen.getByText('Sequence gaps')).toBeInTheDocument();
     expect(await screen.findByText('PARSE: invalid frame')).toBeInTheDocument();
+    vi.unstubAllGlobals();
+  });
+
+  it('restores an externally completed run and its conditional download', async () => {
+    vi.stubGlobal(
+      'EventSource',
+      class {
+        addEventListener() {}
+        close() {}
+      },
+    );
+    const run = {
+      runId: 'external-run',
+      pipelineId: pipeline.id,
+      revisionId: '441e3c21-5dcb-47ed-b049-79a7e1c54135',
+      state: 'COMPLETED',
+      failureSummary: null,
+      startedAt: '2026-08-03T13:00:00Z',
+      finishedAt: '2026-08-03T13:00:01Z',
+    };
+    server.use(
+      http.get(`*/api/v1/pipelines/${pipeline.id}`, () =>
+        HttpResponse.json({
+          ...pipeline,
+          version: 2,
+          latestRevision: {
+            id: run.revisionId,
+            revisionNumber: 3,
+            createdAt: '2026-08-03T13:00:00Z',
+          },
+        }),
+      ),
+      http.get(`*/api/v1/pipelines/${pipeline.id}/runs/latest`, () =>
+        HttpResponse.json(run),
+      ),
+      http.get(
+        `*/api/v1/pipelines/${pipeline.id}/runs/${run.runId}/monitoring`,
+        () =>
+          HttpResponse.json({
+            runId: run.runId,
+            state: 'COMPLETED',
+            counters: {
+              received: 10_001,
+              parsed: 10_000,
+              emitted: 10_000,
+              filtered: 0,
+              failed: 1,
+            },
+            eventRatePerSecond: 0,
+            latency: { totalNanos: 1, processedEvents: 1, averageNanos: 1 },
+            queueDepth: 0,
+            sequenceGapCount: 0,
+            duplicateCount: 0,
+            history: [],
+            deadLetters: [],
+            outputAvailable: true,
+          }),
+      ),
+    );
+
+    renderDashboard(`/pipelines/${pipeline.id}`);
+
+    expect(await screen.findByText('Pipeline health')).toBeInTheDocument();
+    expect(
+      await screen.findByRole('link', { name: 'Download finite output' }),
+    ).toHaveAttribute(
+      'href',
+      `/api/v1/pipelines/${pipeline.id}/runs/${run.runId}/output`,
+    );
     vi.unstubAllGlobals();
   });
 });

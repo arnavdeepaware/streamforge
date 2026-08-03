@@ -127,6 +127,19 @@ class ControlPlanePersistenceIntegrationTest {
     String id = objectMapper.readTree(response).get("id").asText();
 
     mockMvc
+        .perform(get("/api/v1/pipelines/{id}/runs/latest", id))
+        .andExpect(status().isNoContent());
+    mockMvc
+        .perform(
+            post("/api/v1/pipelines/{id}/runs", id)
+                .contentType("application/json")
+                .content(
+                    """
+                    {"deadLetter":{"policy":"QUARANTINE","includePayload":true,"maximumPayloadBytes":0}}
+                    """))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.errors[0].field").value("deadLetter"));
+    mockMvc
         .perform(
             post("/api/v1/pipelines/validate")
                 .contentType("application/json")
@@ -155,6 +168,11 @@ class ControlPlanePersistenceIntegrationTest {
         .perform(post("/api/v1/pipelines/{id}/archive", id))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.archived").value(true));
+    mockMvc
+        .perform(
+            post("/api/v1/pipelines/{id}/runs", id).contentType("application/json").content("{}"))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.title").value("Resource conflict"));
     mockMvc
         .perform(
             post("/api/v1/pipelines/validate")

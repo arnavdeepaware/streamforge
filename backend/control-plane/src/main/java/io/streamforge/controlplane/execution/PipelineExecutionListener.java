@@ -1,6 +1,5 @@
 package io.streamforge.controlplane.execution;
 
-import io.streamforge.pipelineruntime.PipelineReport;
 import io.streamforge.pipelineruntime.PipelineRunMetrics;
 import io.streamforge.pipelineruntime.deadletter.DeadLetterRecord;
 
@@ -8,7 +7,7 @@ import io.streamforge.pipelineruntime.deadletter.DeadLetterRecord;
 public interface PipelineExecutionListener {
   void onRunning();
 
-  void onCompleted(PipelineReport report);
+  void onCompleted(PipelineExecutionResult result);
 
   void onFailed(Throwable failure);
 

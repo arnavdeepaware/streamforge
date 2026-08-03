@@ -130,6 +130,18 @@ a:focus-visible {
   text-transform: uppercase;
 }
 
+.pagination {
+  align-items: center;
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  margin-top: 1.5rem;
+}
+
+.pagination button {
+  min-width: 6.5rem;
+}
+
 .resource-grid {
   display: grid;
   gap: 1rem;

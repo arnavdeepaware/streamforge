@@ -1,4 +1,5 @@
 import {
+  exactJsonParse,
   parsePipelineMonitoring,
   type PipelineMonitoring,
 } from './controlPlaneClient';
@@ -25,7 +26,7 @@ export function subscribePipelineMonitoring(
     source.addEventListener('pipeline-health', (event) => {
       try {
         const message = event as MessageEvent<string>;
-        const snapshot = parsePipelineMonitoring(JSON.parse(message.data));
+        const snapshot = parsePipelineMonitoring(exactJsonParse(message.data));
         subscriber.onSnapshot(snapshot);
         attempts = 0;
         subscriber.onConnected();

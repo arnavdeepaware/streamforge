@@ -14,6 +14,7 @@ public record PipelineMonitoringResponse(
     long queueDepth,
     long sequenceGapCount,
     long duplicateCount,
+    boolean outputAvailable,
     List<MetricSampleResponse> history,
     List<DeadLetterResponse> deadLetters) {
   public PipelineMonitoringResponse {

@@ -51,6 +51,7 @@ class LocalPipelineRunnerTest {
     PipelineReport report = new LocalPipelineRunner().run(config, new PipelineCancellation());
 
     assertThat(report.counters()).isEqualTo(new PipelineCounters(1, 1, 1, 0, 1, 0));
+    assertThat(report.outcome()).isEqualTo(PipelineOutcome.COMPLETED);
     assertThat(report.failures()).isEmpty();
     assertThat(Files.readString(output))
         .isEqualTo(Files.readString(example("pipeline-aapl-jsonl-golden-output.jsonl")));
@@ -171,6 +172,7 @@ class LocalPipelineRunnerTest {
             new PipelineOutput.JsonLines(output));
 
     PipelineReport failures = new LocalPipelineRunner().run(config, new PipelineCancellation());
+    assertThat(failures.outcome()).isEqualTo(PipelineOutcome.COMPLETED);
     assertThat(failures.counters().failed()).isEqualTo(1);
     assertThat(failures.failures().getFirst().stage()).isEqualTo(PipelineStage.PARSE);
     assertThat(failures.failures().getFirst().sourceLocation()).endsWith("line 2");
@@ -185,8 +187,48 @@ class LocalPipelineRunnerTest {
             config.blueprintConfig(),
             new PipelineOutput.JsonLines(cancelledOutput));
     PipelineReport cancelled = new LocalPipelineRunner().run(cancelledConfig, cancellation);
-    assertThat(cancelled.cancelled()).isTrue();
+    assertThat(cancelled.outcome()).isEqualTo(PipelineOutcome.CANCELLED);
     assertThat(Files.exists(cancelledOutput)).isFalse();
+  }
+
+  @Test
+  void reportsInputAndOutputFailuresAsTerminalOutcomesWithoutPublishingArtifacts()
+      throws Exception {
+    Path missingInput = temporaryDirectory.resolve("missing.jsonl");
+    Path missingInputOutput = temporaryDirectory.resolve("missing-output.jsonl");
+    PipelineReport inputFailure =
+        new LocalPipelineRunner()
+            .run(
+                new PipelineRunConfig(
+                    new PipelineInput.JsonLines(missingInput, JsonLinesMode.CONTINUE_WITH_ERRORS),
+                    Optional.empty(),
+                    Optional.empty(),
+                    new PipelineOutput.JsonLines(missingInputOutput)),
+                new PipelineCancellation());
+
+    assertThat(inputFailure.outcome()).isEqualTo(PipelineOutcome.FAILED);
+    assertThat(inputFailure.failures())
+        .extracting(PipelineFailure::stage)
+        .contains(PipelineStage.INPUT);
+    assertThat(Files.exists(missingInputOutput)).isFalse();
+
+    Path blockingParent = temporaryDirectory.resolve("not-a-directory");
+    Files.writeString(blockingParent, "occupied");
+    PipelineReport outputFailure =
+        new LocalPipelineRunner()
+            .run(
+                new PipelineRunConfig(
+                    new PipelineInput.JsonLines(
+                        example("pipeline-aapl-input.jsonl"), JsonLinesMode.CONTINUE_WITH_ERRORS),
+                    Optional.empty(),
+                    Optional.empty(),
+                    new PipelineOutput.JsonLines(blockingParent.resolve("output.jsonl"))),
+                new PipelineCancellation());
+
+    assertThat(outputFailure.outcome()).isEqualTo(PipelineOutcome.FAILED);
+    assertThat(outputFailure.failures())
+        .extracting(PipelineFailure::stage)
+        .contains(PipelineStage.OUTPUT);
   }
 
   private static CsvAdapterConfig csvConfig() {

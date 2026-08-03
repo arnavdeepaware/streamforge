@@ -21,3 +21,9 @@ management:
     health:
       probes:
         enabled: true
+
+streamforge:
+  local-pipeline:
+    workspace: ${STREAMFORGE_LOCAL_PIPELINE_WORKSPACE:.streamforge/workspace}
+    input-root: ${STREAMFORGE_LOCAL_PIPELINE_INPUT_ROOT:.}
+    artifact-root: ${STREAMFORGE_LOCAL_PIPELINE_ARTIFACT_ROOT:.streamforge/artifacts}

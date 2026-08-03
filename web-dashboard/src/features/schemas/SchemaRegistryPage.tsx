@@ -1,3 +1,5 @@
+import { useSearchParams } from 'react-router-dom';
+import { exactIntegerText } from '../../api/controlPlaneClient';
 import { useSchemas } from '../../api/queries';
 import {
   EmptyState,
@@ -5,9 +7,12 @@ import {
   LoadingState,
 } from '../../components/AsyncState';
 import { PageHeader } from '../../components/PageHeader';
+import { Pagination } from '../../components/Pagination';
 
 export function SchemaRegistryPage() {
-  const schemas = useSchemas();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const page = pageFrom(searchParams.get('page'));
+  const schemas = useSchemas(page);
 
   if (schemas.isPending)
     return <LoadingState title="Schema registry is loading" />;
@@ -40,8 +45,8 @@ export function SchemaRegistryPage() {
         Versioned JSON Schema definitions from the control plane.
       </PageHeader>
       <p aria-live="polite" className="result-summary">
-        {schemas.data.totalItems} schema
-        {schemas.data.totalItems === 1 ? '' : 's'} available
+        {exactIntegerText(schemas.data.totalItems)} schema
+        {exactIntegerText(schemas.data.totalItems) === '1' ? '' : 's'} available
       </p>
       <div className="resource-grid">
         {schemas.data.items.map((schema) => (
@@ -72,8 +77,20 @@ export function SchemaRegistryPage() {
           </article>
         ))}
       </div>
+      <Pagination
+        onPageChange={(nextPage) =>
+          setSearchParams(nextPage === 0 ? {} : { page: String(nextPage + 1) })
+        }
+        page={page}
+        totalPages={schemas.data.totalPages}
+      />
     </section>
   );
+}
+
+function pageFrom(value: string | null): number {
+  const page = Number(value);
+  return Number.isSafeInteger(page) && page > 0 ? page - 1 : 0;
 }
 
 function formatDate(value: string): string {

@@ -33,6 +33,7 @@ const snapshot = {
   duplicateCount: 0,
   history: [],
   deadLetters: [],
+  outputAvailable: false,
 };
 
 afterEach(() => {

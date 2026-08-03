@@ -20,3 +20,4 @@
 - [ADR 0003: Control plane and data plane](adr/0003-control-plane-and-data-plane.md)
 - [ADR 0004: Safe declarative transformations](adr/0004-safe-declarative-transformations.md)
 - [ADR 0005: Simple Tick Protocol Version 1 Wire Format](adr/0005-stp-wire-format.md)
+- [ADR 0006: Managed Local Run Artifacts and Explicit Outcomes](adr/0006-managed-local-run-artifacts.md)

@@ -1,4 +1,5 @@
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
+import { exactIntegerText } from '../../api/controlPlaneClient';
 import { usePipelines } from '../../api/queries';
 import {
   EmptyState,
@@ -6,13 +7,16 @@ import {
   LoadingState,
 } from '../../components/AsyncState';
 import { PageHeader } from '../../components/PageHeader';
+import { Pagination } from '../../components/Pagination';
 
 type PipelineListPageProps = {
   compact?: boolean;
 };
 
 export function PipelineListPage({ compact = false }: PipelineListPageProps) {
-  const pipelines = usePipelines();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const page = compact ? 0 : pageFrom(searchParams.get('page'));
+  const pipelines = usePipelines(page);
   const title = compact ? 'Dashboard' : 'Pipelines';
 
   if (pipelines.isPending)
@@ -50,8 +54,9 @@ export function PipelineListPage({ compact = false }: PipelineListPageProps) {
           : 'Pipeline definitions, revision state, and archival status from the control plane.'}
       </PageHeader>
       <p aria-live="polite" className="result-summary">
-        {pipelines.data.totalItems} pipeline
-        {pipelines.data.totalItems === 1 ? '' : 's'} available
+        {exactIntegerText(pipelines.data.totalItems)} pipeline
+        {exactIntegerText(pipelines.data.totalItems) === '1' ? '' : 's'}{' '}
+        available
       </p>
       <div className="resource-grid">
         {pipelines.data.items.map((pipeline) => (
@@ -76,8 +81,24 @@ export function PipelineListPage({ compact = false }: PipelineListPageProps) {
           </article>
         ))}
       </div>
+      {!compact ? (
+        <Pagination
+          onPageChange={(nextPage) =>
+            setSearchParams(
+              nextPage === 0 ? {} : { page: String(nextPage + 1) },
+            )
+          }
+          page={page}
+          totalPages={pipelines.data.totalPages}
+        />
+      ) : null}
     </section>
   );
+}
+
+function pageFrom(value: string | null): number {
+  const page = Number(value);
+  return Number.isSafeInteger(page) && page > 0 ? page - 1 : 0;
 }
 
 function StatusBadge({ archived }: { archived: boolean }) {

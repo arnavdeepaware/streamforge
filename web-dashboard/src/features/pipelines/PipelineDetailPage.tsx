@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   controlPlaneClient,
   type PipelineRun,
 } from '../../api/controlPlaneClient';
-import { usePipeline } from '../../api/queries';
+import { useLatestPipelineRun, usePipeline } from '../../api/queries';
 import {
   EmptyState,
   ErrorState,
@@ -16,9 +16,14 @@ import { PipelineHealthPanel } from './PipelineHealthPanel';
 export function PipelineDetailPage() {
   const { pipelineId = '' } = useParams();
   const pipeline = usePipeline(pipelineId);
+  const latestRun = useLatestPipelineRun(pipelineId);
   const [run, setRun] = useState<PipelineRun | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
   const [actionPending, setActionPending] = useState(false);
+
+  useEffect(() => {
+    if (latestRun.data !== undefined) setRun(latestRun.data);
+  }, [latestRun.data]);
 
   if (pipelineId.length === 0) {
     return (
@@ -78,7 +83,12 @@ export function PipelineDetailPage() {
         </p>
         <div>
           <button
-            disabled={actionPending || (run !== null && isActive(run.state))}
+            disabled={
+              definition.archived ||
+              latestRun.isPending ||
+              actionPending ||
+              (run !== null && isActive(run.state))
+            }
             onClick={() => void startPipeline()}
             type="button"
           >
@@ -94,6 +104,12 @@ export function PipelineDetailPage() {
             </button>
           ) : null}
         </div>
+        {definition.archived ? (
+          <p className="form-hint">Archived pipelines cannot be started.</p>
+        ) : null}
+        {latestRun.isError ? (
+          <p role="alert">Latest run could not be restored.</p>
+        ) : null}
         {runError ? <p role="alert">{runError}</p> : null}
       </section>
       {run !== null ? (

@@ -6,15 +6,17 @@ import type {
 } from './controlPlaneClient';
 
 export const controlPlaneQueryKeys = {
-  pipelines: ['pipelines'] as const,
+  pipelines: (page: number) => ['pipelines', { page }] as const,
   pipeline: (pipelineId: string) => ['pipelines', pipelineId] as const,
-  schemas: ['schemas'] as const,
+  latestRun: (pipelineId: string) =>
+    ['pipelines', pipelineId, 'runs', 'latest'] as const,
+  schemas: (page: number) => ['schemas', { page }] as const,
 };
 
-export function usePipelines() {
+export function usePipelines(page = 0) {
   return useQuery({
-    queryKey: controlPlaneQueryKeys.pipelines,
-    queryFn: controlPlaneClient.listPipelines,
+    queryKey: controlPlaneQueryKeys.pipelines(page),
+    queryFn: () => controlPlaneClient.listPipelines(page, 20),
   });
 }
 
@@ -26,10 +28,18 @@ export function usePipeline(pipelineId: string) {
   });
 }
 
-export function useSchemas() {
+export function useLatestPipelineRun(pipelineId: string) {
   return useQuery({
-    queryKey: controlPlaneQueryKeys.schemas,
-    queryFn: controlPlaneClient.listSchemas,
+    queryKey: controlPlaneQueryKeys.latestRun(pipelineId),
+    queryFn: () => controlPlaneClient.getLatestPipelineRun(pipelineId),
+    enabled: pipelineId.length > 0,
+  });
+}
+
+export function useSchemas(page = 0) {
+  return useQuery({
+    queryKey: controlPlaneQueryKeys.schemas(page),
+    queryFn: () => controlPlaneClient.listSchemas(page, 20),
   });
 }
 

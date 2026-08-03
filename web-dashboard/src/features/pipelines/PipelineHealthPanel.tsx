@@ -1,6 +1,9 @@
 import { useEffect } from 'react';
 import {
+  exactIntegerBigInt,
+  exactIntegerText,
   pipelineOutputDownloadUrl,
+  type ExactInteger,
   type PipelineRun,
   type PipelineRunState,
 } from '../../api/controlPlaneClient';
@@ -53,16 +56,19 @@ export function PipelineHealthPanel({
         />
         <Metric
           label="Timed events"
-          value={String(snapshot?.latency.processedEvents ?? 0)}
+          value={exactIntegerText(snapshot?.latency.processedEvents ?? 0)}
         />
-        <Metric label="Queue depth" value={String(snapshot?.queueDepth ?? 0)} />
+        <Metric
+          label="Queue depth"
+          value={exactIntegerText(snapshot?.queueDepth ?? 0)}
+        />
         <Metric
           label="Sequence gaps"
-          value={String(snapshot?.sequenceGapCount ?? 0)}
+          value={exactIntegerText(snapshot?.sequenceGapCount ?? 0)}
         />
         <Metric
           label="Duplicates"
-          value={String(snapshot?.duplicateCount ?? 0)}
+          value={exactIntegerText(snapshot?.duplicateCount ?? 0)}
         />
       </dl>
       {monitoring.error ? <p role="alert">{monitoring.error}</p> : null}
@@ -79,7 +85,7 @@ export function PipelineHealthPanel({
       />
       <RateHistory history={snapshot?.history ?? []} />
       <DeadLetters deadLetters={snapshot?.deadLetters ?? []} />
-      {terminal && state !== 'FAILED' ? (
+      {terminal && snapshot?.outputAvailable === true ? (
         <a
           className="download-link"
           href={pipelineOutputDownloadUrl(pipelineId, run.runId)}
@@ -104,20 +110,20 @@ function CounterCards({
   counters,
 }: {
   counters: {
-    received: number;
-    parsed: number;
-    emitted: number;
-    filtered: number;
-    failed: number;
+    received: ExactInteger;
+    parsed: ExactInteger;
+    emitted: ExactInteger;
+    filtered: ExactInteger;
+    failed: ExactInteger;
   };
 }) {
   return (
     <div className="counter-grid" aria-label="Pipeline event counters">
-      <Metric label="Received" value={String(counters.received)} />
-      <Metric label="Parsed" value={String(counters.parsed)} />
-      <Metric label="Emitted" value={String(counters.emitted)} />
-      <Metric label="Filtered" value={String(counters.filtered)} />
-      <Metric label="Failed" value={String(counters.failed)} />
+      <Metric label="Received" value={exactIntegerText(counters.received)} />
+      <Metric label="Parsed" value={exactIntegerText(counters.parsed)} />
+      <Metric label="Emitted" value={exactIntegerText(counters.emitted)} />
+      <Metric label="Filtered" value={exactIntegerText(counters.filtered)} />
+      <Metric label="Failed" value={exactIntegerText(counters.failed)} />
     </div>
   );
 }
@@ -125,15 +131,19 @@ function CounterCards({
 function RateHistory({
   history,
 }: {
-  history: { received: number; timestamp: string }[];
+  history: { received: ExactInteger; timestamp: string }[];
 }) {
-  const maximum = Math.max(1, ...history.map((sample) => sample.received));
+  const maximum = history.reduce((current, sample) => {
+    const received = exactIntegerBigInt(sample.received);
+    return received > current ? received : current;
+  }, 1n);
   const latest = history.at(-1)?.received ?? 0;
   return (
     <section aria-labelledby="event-history-title" className="rate-history">
       <h4 id="event-history-title">Received-event history</h4>
       <p className="visually-hidden">
-        {history.length} retained samples. Latest received count: {latest}.
+        {history.length} retained samples. Latest received count:{' '}
+        {exactIntegerText(latest)}.
       </p>
       <div aria-hidden="true" className="rate-bars">
         {history.map((sample) => (
@@ -141,7 +151,12 @@ function RateHistory({
             className="rate-bars__bar"
             key={sample.timestamp}
             style={{
-              height: `${Math.max(3, (sample.received / maximum) * 100)}%`,
+              height: `${Math.max(
+                3,
+                Number(
+                  (exactIntegerBigInt(sample.received) * 10_000n) / maximum,
+                ) / 100,
+              )}%`,
             }}
           />
         ))}
@@ -208,8 +223,15 @@ function DeadLetters({
   );
 }
 
-function formatNanos(value: number): string {
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)} ms average`;
-  if (value >= 1_000) return `${(value / 1_000).toFixed(2)} µs average`;
-  return `${value} ns average`;
+function formatNanos(value: ExactInteger): string {
+  const nanos = exactIntegerBigInt(value);
+  if (nanos >= 1_000_000n)
+    return `${formatRatio(nanos, 1_000_000n)} ms average`;
+  if (nanos >= 1_000n) return `${formatRatio(nanos, 1_000n)} µs average`;
+  return `${nanos} ns average`;
+}
+
+function formatRatio(value: bigint, divisor: bigint): string {
+  const hundredths = (value * 100n) / divisor;
+  return `${hundredths / 100n}.${String(hundredths % 100n).padStart(2, '0')}`;
 }

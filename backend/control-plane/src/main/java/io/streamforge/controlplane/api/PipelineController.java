@@ -123,6 +123,14 @@ public final class PipelineController {
     return runs.status(id, runId);
   }
 
+  @GetMapping("/{id}/runs/latest")
+  @Operation(summary = "Get the most recently created run for a pipeline")
+  public ResponseEntity<PipelineRunResponse> latestRun(@PathVariable("id") UUID id) {
+    return runs.latest(id)
+        .map(ResponseEntity::ok)
+        .orElseGet(() -> ResponseEntity.noContent().build());
+  }
+
   @GetMapping("/{id}/runs/{runId}/report")
   @Operation(summary = "Get the final pipeline run report")
   public PipelineReportResponse report(

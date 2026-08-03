@@ -24,6 +24,7 @@ coverage/
 *.log
 tmp/
 *.tmp
+.streamforge/
 
 # Local benchmark measurements
 tests/performance/results/
