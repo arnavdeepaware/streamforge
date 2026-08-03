@@ -25,6 +25,8 @@ import io.streamforge.stp.protocol.StpEncoder;
 import io.streamforge.stp.protocol.StpProtocol;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Clock;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -49,6 +51,7 @@ class LocalPipelineRunnerTest {
     PipelineReport report = new LocalPipelineRunner().run(config, new PipelineCancellation());
 
     assertThat(report.counters()).isEqualTo(new PipelineCounters(1, 1, 1, 0, 1, 0));
+    assertThat(report.outcome()).isEqualTo(PipelineOutcome.COMPLETED);
     assertThat(report.failures()).isEmpty();
     assertThat(Files.readString(output))
         .isEqualTo(Files.readString(example("pipeline-aapl-jsonl-golden-output.jsonl")));
@@ -106,11 +109,11 @@ class LocalPipelineRunnerTest {
                 new FrameHeader(
                     StpProtocol.EXECUTE_ORDER_ENCODED_LENGTH,
                     MessageType.EXECUTE_ORDER,
-                    new SequenceNumber(2),
+                    new SequenceNumber(3),
                     new EventTimestamp(1_000_000_100L)),
                 new OrderId(77),
                 new Quantity(40)));
-    Files.write(input, join(add, execute));
+    Files.write(input, join(add, execute, execute));
     Path output = temporaryDirectory.resolve("ticks.jsonl");
     PipelineRunConfig config =
         new PipelineRunConfig(
@@ -123,9 +126,33 @@ class LocalPipelineRunnerTest {
             Optional.empty(),
             new PipelineOutput.JsonLines(output));
 
-    PipelineReport report = new LocalPipelineRunner().run(config, new PipelineCancellation());
+    List<PipelineRunMetrics> liveMetrics = new ArrayList<>();
+    PipelineReport report =
+        new LocalPipelineRunner(
+                100,
+                Clock.systemUTC(),
+                new PipelineRunObserver() {
+                  @Override
+                  public void onMetrics(PipelineRunMetrics metrics) {
+                    liveMetrics.add(metrics);
+                  }
 
-    assertThat(report.counters()).isEqualTo(new PipelineCounters(2, 2, 2, 0, 2, 0));
+                  @Override
+                  public void onDeadLetter(
+                      io.streamforge.pipelineruntime.deadletter.DeadLetterRecord record) {}
+                })
+            .run(config, new PipelineCancellation());
+
+    assertThat(report.counters()).isEqualTo(new PipelineCounters(3, 3, 3, 0, 3, 0));
+    assertThat(liveMetrics)
+        .last()
+        .satisfies(
+            metrics -> {
+              assertThat(metrics.counters()).isEqualTo(report.counters());
+              assertThat(metrics.sequenceGapCount()).isEqualTo(1);
+              assertThat(metrics.duplicateCount()).isEqualTo(1);
+              assertThat(metrics.queueDepth()).isZero();
+            });
     assertThat(Files.readString(output))
         .contains("\"type\":\"ORDER_ADDED\"")
         .contains("\"type\":\"ORDER_EXECUTED\"")
@@ -145,6 +172,7 @@ class LocalPipelineRunnerTest {
             new PipelineOutput.JsonLines(output));
 
     PipelineReport failures = new LocalPipelineRunner().run(config, new PipelineCancellation());
+    assertThat(failures.outcome()).isEqualTo(PipelineOutcome.COMPLETED);
     assertThat(failures.counters().failed()).isEqualTo(1);
     assertThat(failures.failures().getFirst().stage()).isEqualTo(PipelineStage.PARSE);
     assertThat(failures.failures().getFirst().sourceLocation()).endsWith("line 2");
@@ -159,8 +187,48 @@ class LocalPipelineRunnerTest {
             config.blueprintConfig(),
             new PipelineOutput.JsonLines(cancelledOutput));
     PipelineReport cancelled = new LocalPipelineRunner().run(cancelledConfig, cancellation);
-    assertThat(cancelled.cancelled()).isTrue();
+    assertThat(cancelled.outcome()).isEqualTo(PipelineOutcome.CANCELLED);
     assertThat(Files.exists(cancelledOutput)).isFalse();
+  }
+
+  @Test
+  void reportsInputAndOutputFailuresAsTerminalOutcomesWithoutPublishingArtifacts()
+      throws Exception {
+    Path missingInput = temporaryDirectory.resolve("missing.jsonl");
+    Path missingInputOutput = temporaryDirectory.resolve("missing-output.jsonl");
+    PipelineReport inputFailure =
+        new LocalPipelineRunner()
+            .run(
+                new PipelineRunConfig(
+                    new PipelineInput.JsonLines(missingInput, JsonLinesMode.CONTINUE_WITH_ERRORS),
+                    Optional.empty(),
+                    Optional.empty(),
+                    new PipelineOutput.JsonLines(missingInputOutput)),
+                new PipelineCancellation());
+
+    assertThat(inputFailure.outcome()).isEqualTo(PipelineOutcome.FAILED);
+    assertThat(inputFailure.failures())
+        .extracting(PipelineFailure::stage)
+        .contains(PipelineStage.INPUT);
+    assertThat(Files.exists(missingInputOutput)).isFalse();
+
+    Path blockingParent = temporaryDirectory.resolve("not-a-directory");
+    Files.writeString(blockingParent, "occupied");
+    PipelineReport outputFailure =
+        new LocalPipelineRunner()
+            .run(
+                new PipelineRunConfig(
+                    new PipelineInput.JsonLines(
+                        example("pipeline-aapl-input.jsonl"), JsonLinesMode.CONTINUE_WITH_ERRORS),
+                    Optional.empty(),
+                    Optional.empty(),
+                    new PipelineOutput.JsonLines(blockingParent.resolve("output.jsonl"))),
+                new PipelineCancellation());
+
+    assertThat(outputFailure.outcome()).isEqualTo(PipelineOutcome.FAILED);
+    assertThat(outputFailure.failures())
+        .extracting(PipelineFailure::stage)
+        .contains(PipelineStage.OUTPUT);
   }
 
   private static CsvAdapterConfig csvConfig() {
@@ -181,10 +249,14 @@ class LocalPipelineRunnerTest {
         new SourceIdentity("csv/sample-trades"));
   }
 
-  private static byte[] join(byte[] first, byte[] second) {
-    byte[] combined = new byte[first.length + second.length];
-    System.arraycopy(first, 0, combined, 0, first.length);
-    System.arraycopy(second, 0, combined, first.length, second.length);
+  private static byte[] join(byte[]... frames) {
+    int totalLength = java.util.Arrays.stream(frames).mapToInt(frame -> frame.length).sum();
+    byte[] combined = new byte[totalLength];
+    int offset = 0;
+    for (byte[] frame : frames) {
+      System.arraycopy(frame, 0, combined, offset, frame.length);
+      offset += frame.length;
+    }
     return combined;
   }
 

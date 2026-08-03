@@ -8,6 +8,10 @@ import io.streamforge.parserengine.JsonLinesCanonicalEvent;
 import io.streamforge.parserengine.JsonLinesError;
 import io.streamforge.parserengine.JsonLinesInputAdapter;
 import io.streamforge.parserengine.NormalizedStpEvent;
+import io.streamforge.parserengine.SequenceIntegrityEvent;
+import io.streamforge.parserengine.SequenceIntegrityStatus;
+import io.streamforge.parserengine.SequenceIntegrityTracker;
+import io.streamforge.parserengine.SequenceSource;
 import io.streamforge.parserengine.StpNormalizationContext;
 import io.streamforge.parserengine.StpNormalizationFailure;
 import io.streamforge.parserengine.StpNormalizationResult;
@@ -32,6 +36,7 @@ import io.streamforge.stp.protocol.CancelOrderMessage;
 import io.streamforge.stp.protocol.IncrementalStpDecoder;
 import io.streamforge.stp.protocol.ParsedStpFrame;
 import io.streamforge.stp.protocol.StpDecodeResult;
+import io.streamforge.stp.protocol.StpMessage;
 import io.streamforge.stp.protocol.StpParseEvent;
 import io.streamforge.stp.protocol.StpParseFailure;
 import io.streamforge.transform.blueprint.BlueprintPreviewResult;
@@ -74,26 +79,38 @@ public final class LocalPipelineRunner {
 
   private final int maxRetainedFailures;
   private final Clock clock;
+  private final PipelineRunObserver observer;
 
   public LocalPipelineRunner() {
-    this(DEFAULT_MAX_RETAINED_FAILURES, Clock.systemUTC());
+    this(DEFAULT_MAX_RETAINED_FAILURES, Clock.systemUTC(), PipelineRunObserver.NO_OP);
+  }
+
+  /** Creates a runner with standard bounds and a live monitoring observer. */
+  public LocalPipelineRunner(PipelineRunObserver observer) {
+    this(DEFAULT_MAX_RETAINED_FAILURES, Clock.systemUTC(), observer);
   }
 
   /** Creates a runner that retains at most the requested number of detailed failures per run. */
   public LocalPipelineRunner(int maxRetainedFailures) {
-    this(maxRetainedFailures, Clock.systemUTC());
+    this(maxRetainedFailures, Clock.systemUTC(), PipelineRunObserver.NO_OP);
   }
 
   /** Creates a runner with a supplied clock for deterministic diagnostic timestamps. */
   public LocalPipelineRunner(int maxRetainedFailures, Clock clock) {
+    this(maxRetainedFailures, clock, PipelineRunObserver.NO_OP);
+  }
+
+  /** Creates a runner that synchronously publishes bounded live monitoring snapshots. */
+  public LocalPipelineRunner(int maxRetainedFailures, Clock clock, PipelineRunObserver observer) {
     if (maxRetainedFailures < 1) {
       throw new IllegalArgumentException("maximum retained failures must be positive");
     }
-    if (clock == null) {
-      throw new IllegalArgumentException("clock must not be null");
+    if (clock == null || observer == null) {
+      throw new IllegalArgumentException("clock and observer must not be null");
     }
     this.maxRetainedFailures = maxRetainedFailures;
     this.clock = clock;
+    this.observer = observer;
   }
 
   /**
@@ -115,7 +132,8 @@ public final class LocalPipelineRunner {
               config.identity(),
               config.deadLetterConfig(),
               deadLetters,
-              clock);
+              clock,
+              observer);
       try {
         sink.start();
       } catch (OutputSinkException exception) {
@@ -127,6 +145,7 @@ public final class LocalPipelineRunner {
             DeadLetterCategory.OUTPUT,
             Retryability.RETRYABLE,
             Optional.empty());
+        state.markTerminalFailure();
         deadLetters.complete();
         return state.report(cancellation.isCancelled());
       }
@@ -142,9 +161,11 @@ public final class LocalPipelineRunner {
       } catch (IOException exception) {
         state.recordTerminal(
             PipelineStage.INPUT, config.input().path().toString(), detail(exception));
+        state.markTerminalFailure();
         sink.abort();
       } catch (OutputSinkException exception) {
         state.recordTerminal(PipelineStage.OUTPUT, "output", detail(exception));
+        state.markTerminalFailure();
         sink.abort();
       }
       deadLetters.complete();
@@ -259,6 +280,7 @@ public final class LocalPipelineRunner {
                           Retryability.NON_RETRYABLE,
                           state.captureText(error.sourceText()));
                 }
+                state.publishMetrics();
               });
     } catch (Stopped stopped) {
       throw stopped;
@@ -306,6 +328,7 @@ public final class LocalPipelineRunner {
                           Retryability.NON_RETRYABLE,
                           state.captureText(error.sourceText()));
                 }
+                state.publishMetrics();
               });
     } catch (Stopped stopped) {
       throw stopped;
@@ -386,6 +409,9 @@ public final class LocalPipelineRunner {
       case ParsedStpFrame parsed -> {
         state.parsed++;
         StpDecodeResult decoded = parsed.result();
+        if (decoded instanceof StpMessage message) {
+          state.trackSequence(input.source().value(), message.header().sequenceNumber().value());
+        }
         if (decoded instanceof AddOrderMessage addOrder) {
           instruments.put(addOrder.orderId(), new InstrumentReference(addOrder.symbol()));
         }
@@ -421,6 +447,7 @@ public final class LocalPipelineRunner {
         }
       }
     }
+    state.publishMetrics();
   }
 
   private void processCanonical(
@@ -431,71 +458,77 @@ public final class LocalPipelineRunner {
       OutputSink sink,
       PipelineCancellation cancellation,
       RunState state) {
-    checkCancelled(cancellation);
-    CanonicalEventDocument document;
-    if (prepared.transformationExecutor.isPresent()) {
-      TransformationResult result = prepared.transformationExecutor.orElseThrow().execute(event);
-      switch (result) {
-        case TransformationResult.Transformed transformed -> document = transformed.document();
-        case TransformationResult.Filtered ignored -> {
-          state.filtered++;
-          return;
-        }
-        case TransformationResult.Failed failure -> {
-          handleFailure(
-              state,
-              PipelineStage.TRANSFORM,
-              location,
-              Optional.of(event.metadata().eventId().value()),
-              failure.failure().detail(),
-              DeadLetterCategory.TRANSFORMATION,
-              Retryability.NON_RETRYABLE,
-              state.captureText(sourceText));
-          return;
-        }
-      }
-    } else {
-      document = CanonicalEventDocument.fromCanonicalEvent(event);
-    }
-    checkCancelled(cancellation);
-    OutputRecord record;
-    if (prepared.blueprint.isPresent()) {
-      BlueprintPreviewResult result =
-          prepared.blueprintService.preview(
-              prepared.blueprint.orElseThrow(), event, Optional.of(document));
-      switch (result) {
-        case BlueprintPreviewResult.Rendered rendered ->
-            record = OutputRecord.from(rendered.document());
-        case BlueprintPreviewResult.Failed failure -> {
-          handleFailure(
-              state,
-              PipelineStage.BLUEPRINT,
-              location + failure.failure().location(),
-              Optional.of(event.metadata().eventId().value()),
-              failure.failure().detail(),
-              DeadLetterCategory.BLUEPRINT,
-              Retryability.NON_RETRYABLE,
-              state.captureText(sourceText));
-          return;
-        }
-      }
-    } else {
-      record = OutputRecord.from(document);
-    }
+    long processingStarted = System.nanoTime();
     try {
-      sink.write(record);
-      state.emitted++;
-    } catch (OutputSinkException exception) {
-      handleFailure(
-          state,
-          PipelineStage.OUTPUT,
-          location,
-          Optional.of(event.metadata().eventId().value()),
-          detail(exception),
-          DeadLetterCategory.OUTPUT,
-          Retryability.RETRYABLE,
-          state.captureText(sourceText));
-      throw Stopped.INSTANCE;
+      checkCancelled(cancellation);
+      CanonicalEventDocument document;
+      if (prepared.transformationExecutor.isPresent()) {
+        TransformationResult result = prepared.transformationExecutor.orElseThrow().execute(event);
+        switch (result) {
+          case TransformationResult.Transformed transformed -> document = transformed.document();
+          case TransformationResult.Filtered ignored -> {
+            state.filtered++;
+            return;
+          }
+          case TransformationResult.Failed failure -> {
+            handleFailure(
+                state,
+                PipelineStage.TRANSFORM,
+                location,
+                Optional.of(event.metadata().eventId().value()),
+                failure.failure().detail(),
+                DeadLetterCategory.TRANSFORMATION,
+                Retryability.NON_RETRYABLE,
+                state.captureText(sourceText));
+            return;
+          }
+        }
+      } else {
+        document = CanonicalEventDocument.fromCanonicalEvent(event);
+      }
+      checkCancelled(cancellation);
+      OutputRecord record;
+      if (prepared.blueprint.isPresent()) {
+        BlueprintPreviewResult result =
+            prepared.blueprintService.preview(
+                prepared.blueprint.orElseThrow(), event, Optional.of(document));
+        switch (result) {
+          case BlueprintPreviewResult.Rendered rendered ->
+              record = OutputRecord.from(rendered.document());
+          case BlueprintPreviewResult.Failed failure -> {
+            handleFailure(
+                state,
+                PipelineStage.BLUEPRINT,
+                location + failure.failure().location(),
+                Optional.of(event.metadata().eventId().value()),
+                failure.failure().detail(),
+                DeadLetterCategory.BLUEPRINT,
+                Retryability.NON_RETRYABLE,
+                state.captureText(sourceText));
+            return;
+          }
+        }
+      } else {
+        record = OutputRecord.from(document);
+      }
+      try {
+        sink.write(record);
+        state.emitted++;
+      } catch (OutputSinkException exception) {
+        handleFailure(
+            state,
+            PipelineStage.OUTPUT,
+            location,
+            Optional.of(event.metadata().eventId().value()),
+            detail(exception),
+            DeadLetterCategory.OUTPUT,
+            Retryability.RETRYABLE,
+            state.captureText(sourceText));
+        state.markTerminalFailure();
+        throw Stopped.INSTANCE;
+      }
+    } finally {
+      state.recordProcessing(System.nanoTime() - processingStarted);
     }
   }
 
@@ -520,6 +553,7 @@ public final class LocalPipelineRunner {
       Retryability retryability,
       Optional<DeadLetterPayload> payload) {
     if (state.record(stage, location, eventId, detail, category, retryability, payload)) {
+      state.markTerminalFailure();
       throw Stopped.INSTANCE;
     }
   }
@@ -543,11 +577,18 @@ public final class LocalPipelineRunner {
     private long stpFrameNumber;
     private long suppressedFailures;
     private long deadLettered;
+    private long processingNanos;
+    private long processedEventCount;
+    private long sequenceGapCount;
+    private long duplicateCount;
+    private boolean terminalFailure;
     private final int maximumFailures;
     private final PipelineIdentity identity;
     private final Optional<DeadLetterConfig> deadLetterConfig;
     private final DeadLetterSession deadLetters;
     private final Clock clock;
+    private final PipelineRunObserver observer;
+    private final SequenceIntegrityTracker integrityTracker = new SequenceIntegrityTracker();
     private final List<PipelineFailure> failures = new ArrayList<>();
 
     private RunState(
@@ -555,12 +596,14 @@ public final class LocalPipelineRunner {
         PipelineIdentity identity,
         Optional<DeadLetterConfig> deadLetterConfig,
         DeadLetterSession deadLetters,
-        Clock clock) {
+        Clock clock,
+        PipelineRunObserver observer) {
       this.maximumFailures = maximumFailures;
       this.identity = identity;
       this.deadLetterConfig = deadLetterConfig;
       this.deadLetters = deadLetters;
       this.clock = clock;
+      this.observer = observer;
     }
 
     private boolean record(
@@ -602,6 +645,7 @@ public final class LocalPipelineRunner {
       try {
         deadLetters.write(record);
         deadLettered++;
+        notifyDeadLetter(record);
         return false;
       } catch (OutputSinkException exception) {
         recordTerminal(PipelineStage.OUTPUT, "dead-letter", safeMessage(exception.getMessage()));
@@ -644,6 +688,49 @@ public final class LocalPipelineRunner {
       }
     }
 
+    private void trackSequence(String source, long sequence) {
+      SequenceIntegrityEvent event =
+          integrityTracker.track(
+              new SequenceSource(source), new io.streamforge.common.model.SequenceNumber(sequence));
+      if (event.status() == SequenceIntegrityStatus.GAP_DETECTED) {
+        sequenceGapCount += event.missingSequenceCount();
+      } else if (event.status() == SequenceIntegrityStatus.DUPLICATE) {
+        duplicateCount++;
+      }
+    }
+
+    private void recordProcessing(long elapsedNanos) {
+      processingNanos += Math.max(0, elapsedNanos);
+      processedEventCount++;
+    }
+
+    private void markTerminalFailure() {
+      terminalFailure = true;
+    }
+
+    private void publishMetrics() {
+      try {
+        observer.onMetrics(
+            new PipelineRunMetrics(
+                new PipelineCounters(received, parsed, normalized, filtered, emitted, failed),
+                processingNanos,
+                processedEventCount,
+                sequenceGapCount,
+                duplicateCount,
+                0));
+      } catch (RuntimeException ignored) {
+        // Observability must not change pipeline processing semantics.
+      }
+    }
+
+    private void notifyDeadLetter(DeadLetterRecord record) {
+      try {
+        observer.onDeadLetter(record);
+      } catch (RuntimeException ignored) {
+        // Observability must not change pipeline processing semantics.
+      }
+    }
+
     private static String safeMessage(String detail) {
       String normalized =
           detail == null || detail.isBlank()
@@ -656,11 +743,14 @@ public final class LocalPipelineRunner {
     }
 
     private PipelineReport report(boolean cancelled) {
+      publishMetrics();
       return new PipelineReport(
           new PipelineCounters(received, parsed, normalized, filtered, emitted, failed),
           failures,
           suppressedFailures,
-          cancelled);
+          cancelled
+              ? PipelineOutcome.CANCELLED
+              : terminalFailure ? PipelineOutcome.FAILED : PipelineOutcome.COMPLETED);
     }
   }
 

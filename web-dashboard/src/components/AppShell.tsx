@@ -4,6 +4,7 @@ const navigationItems = [
   { label: 'Dashboard', to: '/dashboard' },
   { label: 'Pipelines', to: '/pipelines' },
   { label: 'New Pipeline', to: '/pipelines/new' },
+  { label: 'Field Mapper', to: '/pipelines/mapper' },
   { label: 'Schema Registry', to: '/schema-registry' },
   { label: 'Stream Inspector', to: '/stream-inspector' },
   { label: 'Dead-Letter Events', to: '/dead-letter-events' },
@@ -18,6 +19,7 @@ export function AppShell() {
       <header className="app-header">
         <p className="eyebrow">Market-data normalization</p>
         <h1>StreamForge</h1>
+        <p className="app-header__summary">Control-plane workspace</p>
       </header>
       <nav aria-label="Primary navigation" className="app-navigation">
         <ul>

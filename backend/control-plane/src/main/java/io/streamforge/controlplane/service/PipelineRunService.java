@@ -4,235 +4,361 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.streamforge.controlplane.api.DeadLetterResponse;
+import io.streamforge.controlplane.api.PipelineMonitoringResponse;
 import io.streamforge.controlplane.api.PipelineReportResponse;
 import io.streamforge.controlplane.api.PipelineRunResponse;
 import io.streamforge.controlplane.api.StartPipelineRequest;
 import io.streamforge.controlplane.execution.PipelineExecutionBackend;
-import io.streamforge.controlplane.execution.PipelineExecutionCommand;
 import io.streamforge.controlplane.execution.PipelineExecutionHandle;
 import io.streamforge.controlplane.execution.PipelineExecutionListener;
+import io.streamforge.controlplane.execution.PipelineExecutionResult;
 import io.streamforge.controlplane.execution.PipelineRunState;
-import io.streamforge.controlplane.persistence.entity.InputDefinitionEntity;
-import io.streamforge.controlplane.persistence.entity.OutputDefinitionEntity;
-import io.streamforge.controlplane.persistence.entity.PipelineRevisionEntity;
-import io.streamforge.controlplane.persistence.entity.PipelineRunEntity;
-import io.streamforge.controlplane.persistence.entity.TransformDefinitionEntity;
-import io.streamforge.controlplane.persistence.repository.InputDefinitionRepository;
-import io.streamforge.controlplane.persistence.repository.OutputDefinitionRepository;
-import io.streamforge.controlplane.persistence.repository.PipelineRevisionRepository;
-import io.streamforge.controlplane.persistence.repository.PipelineRunRepository;
-import io.streamforge.controlplane.persistence.repository.TransformDefinitionRepository;
-import io.streamforge.pipelineruntime.PipelineReport;
+import io.streamforge.controlplane.service.PipelineRunPersistenceService.PreparedRun;
+import io.streamforge.controlplane.service.PipelineRunPersistenceService.StoredRun;
+import io.streamforge.pipelineruntime.PipelineCounters;
+import io.streamforge.pipelineruntime.PipelineOutcome;
+import io.streamforge.pipelineruntime.PipelineRunMetrics;
+import io.streamforge.pipelineruntime.deadletter.DeadLetterRecord;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
+import java.time.Instant;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-/** Coordinates durable lifecycle state with one pluggable execution backend. */
+/** Coordinates committed lifecycle state with one asynchronous execution backend. */
 @Service
 public class PipelineRunService {
-  private final PipelineRunRepository runs;
-  private final PipelineRevisionRepository revisions;
-  private final InputDefinitionRepository inputs;
-  private final TransformDefinitionRepository transforms;
-  private final OutputDefinitionRepository outputs;
+  private final PipelineRunPersistenceService persistence;
   private final PipelineExecutionBackend backend;
+  private final PipelineRunMonitor monitor;
   private final ObjectMapper mapper;
-  private final ConcurrentHashMap<UUID, PipelineExecutionHandle> active = new ConcurrentHashMap<>();
+  private final Path artifactRoot;
+  private final ConcurrentHashMap<UUID, ActiveRun> active = new ConcurrentHashMap<>();
   private final Counter started;
   private final Counter completed;
   private final Counter failed;
 
   public PipelineRunService(
-      PipelineRunRepository runs,
-      PipelineRevisionRepository revisions,
-      InputDefinitionRepository inputs,
-      TransformDefinitionRepository transforms,
-      OutputDefinitionRepository outputs,
+      PipelineRunPersistenceService persistence,
       PipelineExecutionBackend backend,
+      PipelineRunMonitor monitor,
       ObjectMapper mapper,
-      MeterRegistry metrics) {
-    this.runs = runs;
-    this.revisions = revisions;
-    this.inputs = inputs;
-    this.transforms = transforms;
-    this.outputs = outputs;
+      MeterRegistry metrics,
+      @Value("${streamforge.local-pipeline.artifact-root:.streamforge/artifacts}")
+          String artifactRoot) {
+    this.persistence = persistence;
     this.backend = backend;
+    this.monitor = monitor;
     this.mapper = mapper;
+    this.artifactRoot = Path.of(artifactRoot).toAbsolutePath().normalize();
     started = metrics.counter("streamforge.pipeline.runs", "outcome", "started");
     completed = metrics.counter("streamforge.pipeline.runs", "outcome", "completed");
     failed = metrics.counter("streamforge.pipeline.runs", "outcome", "failed");
   }
 
-  /**
-   * Starts the latest pipeline revision once; concurrent starts for the same pipeline are rejected.
-   */
-  @Transactional
+  /** Starts the latest revision after committing its STARTING lifecycle state. */
   public PipelineRunResponse start(UUID pipelineId, StartPipelineRequest request) {
-    PipelineExecutionHandle marker = () -> {};
-    if (active.putIfAbsent(pipelineId, marker) != null)
+    ActiveRun activeRun = new ActiveRun();
+    if (active.putIfAbsent(pipelineId, activeRun) != null) {
       throw new IllegalStateException("pipeline already has an active run");
+    }
+    PreparedRun prepared = null;
     try {
-      PipelineRevisionEntity revision =
-          revisions
-              .findFirstByPipelineDefinitionIdOrderByRevisionNumberDesc(pipelineId)
-              .orElseThrow(() -> new NoSuchElementException("pipeline definition was not found"));
-      String deadLetter =
-          request == null || request.deadLetter() == null ? null : json(request.deadLetter());
-      PipelineRunEntity run =
-          runs.save(new PipelineRunEntity(pipelineId, revision.id(), deadLetter));
-      run.transition(PipelineRunState.VALIDATED, null);
-      run.transition(PipelineRunState.STARTING, null);
+      prepared =
+          persistence.createStarting(pipelineId, request == null ? null : request.deadLetter());
+      UUID runId = prepared.response().runId();
+      activeRun.assign(runId);
+      monitor.register(runId, prepared.response().state());
       PipelineExecutionHandle handle =
-          backend.start(
-              command(run, revision, request == null ? null : request.deadLetter()),
-              new Listener(run.id(), pipelineId));
-      active.replace(pipelineId, marker, handle);
+          backend.start(prepared.command(), new Listener(runId, pipelineId, activeRun));
+      activeRun.attach(handle);
       started.increment();
-      return response(run);
+      return prepared.response();
     } catch (RuntimeException exception) {
-      active.remove(pipelineId, marker);
+      try {
+        if (prepared != null) {
+          PipelineRunResponse response = persistence.fail(prepared.response().runId(), exception);
+          monitor.state(response.runId(), response.state(), false);
+        }
+      } catch (RuntimeException persistenceFailure) {
+        exception.addSuppressed(persistenceFailure);
+      } finally {
+        active.remove(pipelineId, activeRun);
+      }
       throw exception;
     }
   }
 
-  /** Requests cooperative cancellation and records the stopping transition. */
-  @Transactional
   public PipelineRunResponse stop(UUID pipelineId, UUID runId) {
-    PipelineRunEntity run = run(pipelineId, runId);
-    if (run.state() != PipelineRunState.RUNNING && run.state() != PipelineRunState.STARTING)
-      throw new IllegalStateException("pipeline run is not running");
-    run.transition(PipelineRunState.STOPPING, null);
-    PipelineExecutionHandle handle = active.get(pipelineId);
-    if (handle == null)
+    ActiveRun activeRun = active.get(pipelineId);
+    if (activeRun == null || !activeRun.matches(runId)) {
       throw new IllegalStateException("pipeline run has no active execution handle");
-    handle.cancel();
-    return response(run);
+    }
+    PipelineRunResponse response = persistence.requestStop(pipelineId, runId);
+    monitor.state(runId, response.state(), false);
+    activeRun.cancel();
+    return response;
   }
 
-  @Transactional(readOnly = true)
   public PipelineRunResponse status(UUID pipelineId, UUID runId) {
-    return response(run(pipelineId, runId));
+    return persistence.get(pipelineId, runId).response();
   }
 
-  @Transactional(readOnly = true)
+  public Optional<PipelineRunResponse> latest(UUID pipelineId) {
+    return persistence.latest(pipelineId).map(StoredRun::response);
+  }
+
   public PipelineReportResponse report(UUID pipelineId, UUID runId) {
-    PipelineRunEntity run = run(pipelineId, runId);
-    return new PipelineReportResponse(
-        run.id(), run.state(), run.finalReport() == null ? null : tree(run.finalReport()));
+    return persistence.report(pipelineId, runId);
   }
 
-  @Transactional
-  void running(UUID runId) {
-    transition(runId, PipelineRunState.RUNNING, null);
+  public PipelineMonitoringResponse monitoring(UUID pipelineId, UUID runId) {
+    StoredRun run = persistence.get(pipelineId, runId);
+    ensureHydrated(run);
+    return monitor.snapshot(run.response().runId());
   }
 
-  @Transactional
-  void completed(UUID runId, UUID pipelineId, PipelineReport report) {
-    PipelineRunEntity run = runs.findById(runId).orElseThrow();
-    String serialized = json(report);
-    if (run.state() == PipelineRunState.STOPPING || report.cancelled()) run.stop(serialized);
-    else run.complete(serialized);
-    runs.save(run);
-    completed.increment();
-    active.remove(pipelineId);
+  public SseEmitter events(UUID pipelineId, UUID runId) {
+    StoredRun run = persistence.get(pipelineId, runId);
+    ensureHydrated(run);
+    return monitor.subscribe(run.response().runId());
   }
 
-  @Transactional
-  void failed(UUID runId, UUID pipelineId, Throwable failure) {
-    PipelineRunEntity run = runs.findById(runId).orElseThrow();
-    if (run.state().active()) run.transition(PipelineRunState.FAILED, safe(failure));
-    runs.save(run);
-    failed.increment();
-    active.remove(pipelineId);
+  public Resource output(UUID pipelineId, UUID runId) {
+    StoredRun run = persistence.get(pipelineId, runId);
+    if (run.response().state() != PipelineRunState.COMPLETED || run.outputArtifactPath() == null) {
+      throw new IllegalStateException("pipeline output is not available for this run");
+    }
+    return new FileSystemResource(resolveArtifact(run.outputArtifactPath()));
   }
 
-  private void transition(UUID runId, PipelineRunState state, String failure) {
-    PipelineRunEntity run = runs.findById(runId).orElseThrow();
-    if (run.state().canTransitionTo(state)) run.transition(state, failure);
-    runs.save(run);
+  @EventListener(ApplicationReadyEvent.class)
+  public void reconcileInterruptedRuns() {
+    persistence
+        .reconcileInterrupted()
+        .forEach(run -> monitor.state(run.runId(), run.state(), false));
   }
 
-  private PipelineExecutionCommand command(
-      PipelineRunEntity run, PipelineRevisionEntity revision, JsonNode deadLetter) {
-    InputDefinitionEntity input = inputs.findById(revision.inputDefinitionId()).orElseThrow();
-    TransformDefinitionEntity transform =
-        transforms.findById(revision.transformDefinitionId()).orElseThrow();
-    OutputDefinitionEntity output = outputs.findById(revision.outputDefinitionId()).orElseThrow();
-    return new PipelineExecutionCommand(
-        run.id(),
-        run.pipelineDefinitionId(),
-        revision.revisionNumber(),
-        tree(input.configuration()),
-        transform.configuration(),
-        revision.blueprintConfiguration(),
-        tree(output.configuration()),
-        deadLetter);
+  private void ensureHydrated(StoredRun run) {
+    UUID runId = run.response().runId();
+    if (monitor.hasObservation(runId)) return;
+    monitor.hydrate(
+        runId,
+        run.response().state(),
+        metrics(run.finalReport()),
+        restoredDeadLetters(run.deadLetterArtifactPath()),
+        outputAvailable(run));
   }
 
-  private PipelineRunEntity run(UUID pipelineId, UUID runId) {
-    PipelineRunEntity run =
-        runs.findById(runId)
-            .orElseThrow(() -> new NoSuchElementException("pipeline run was not found"));
-    if (!run.pipelineDefinitionId().equals(pipelineId))
-      throw new NoSuchElementException("pipeline run was not found");
-    return run;
-  }
-
-  private PipelineRunResponse response(PipelineRunEntity run) {
-    return new PipelineRunResponse(
-        run.id(),
-        run.pipelineDefinitionId(),
-        run.pipelineRevisionId(),
-        run.state(),
-        run.failureSummary(),
-        run.startedAt(),
-        run.finishedAt());
-  }
-
-  private String json(Object value) {
+  private PipelineRunMetrics metrics(JsonNode report) {
+    if (report == null || !report.path("counters").isObject()) return emptyMetrics();
+    JsonNode counters = report.path("counters");
     try {
-      return mapper.writeValueAsString(value);
-    } catch (Exception exception) {
-      throw new IllegalStateException("could not serialize pipeline state", exception);
+      return new PipelineRunMetrics(
+          new PipelineCounters(
+              exactLong(counters, "received"),
+              exactLong(counters, "parsed"),
+              exactLong(counters, "normalized"),
+              exactLong(counters, "filtered"),
+              exactLong(counters, "emitted"),
+              exactLong(counters, "failed")),
+          0,
+          0,
+          0,
+          0,
+          0);
+    } catch (IllegalArgumentException exception) {
+      return emptyMetrics();
     }
   }
 
-  private JsonNode tree(String value) {
+  private List<DeadLetterResponse> restoredDeadLetters(String relativePath) {
+    if (relativePath == null) return List.of();
+    Path file;
     try {
-      return mapper.readTree(value);
-    } catch (Exception exception) {
-      throw new IllegalStateException("stored pipeline state is invalid", exception);
+      file = resolveArtifact(relativePath);
+    } catch (RuntimeException exception) {
+      return List.of();
+    }
+    Deque<DeadLetterResponse> retained = new ArrayDeque<>();
+    try (BufferedReader reader = Files.newBufferedReader(file)) {
+      String line;
+      while ((line = reader.readLine()) != null) {
+        DeadLetterResponse response = deadLetter(mapper.readTree(line));
+        retained.addFirst(response);
+        while (retained.size() > PipelineRunMonitor.MAXIMUM_DEAD_LETTERS) {
+          retained.removeLast();
+        }
+      }
+      return List.copyOf(retained);
+    } catch (IOException | IllegalArgumentException exception) {
+      return List.of();
     }
   }
 
-  private static String safe(Throwable failure) {
-    String message = failure.getMessage();
-    return message == null || message.isBlank()
-        ? failure.getClass().getSimpleName()
-        : message.substring(0, Math.min(message.length(), 512));
+  private DeadLetterResponse deadLetter(JsonNode node) {
+    JsonNode payload = node.path("payload");
+    return new DeadLetterResponse(
+        requiredText(node, "failureId"),
+        requiredText(node, "stage"),
+        requiredText(node, "category"),
+        requiredText(node, "sourceLocation"),
+        requiredText(node, "safeMessage"),
+        requiredText(node, "retryability"),
+        Instant.parse(requiredText(node, "timestamp")),
+        payload.isObject() ? requiredText(payload, "encoding") : null,
+        payload.isObject() ? requiredText(payload, "value") : null,
+        payload.isObject() && payload.path("truncated").asBoolean(false));
+  }
+
+  private boolean outputAvailable(StoredRun run) {
+    if (run.response().state() != PipelineRunState.COMPLETED || run.outputArtifactPath() == null)
+      return false;
+    try {
+      return Files.isRegularFile(resolveArtifact(run.outputArtifactPath()));
+    } catch (RuntimeException exception) {
+      return false;
+    }
+  }
+
+  private Path resolveArtifact(String relativePath) {
+    try {
+      Files.createDirectories(artifactRoot);
+      Path root = artifactRoot.toRealPath();
+      Path relative = Path.of(relativePath);
+      if (relative.isAbsolute() || relative.normalize().startsWith("..")) {
+        throw new IllegalStateException("stored artifact path is outside the managed root");
+      }
+      Path file = root.resolve(relative).normalize().toRealPath();
+      if (!file.startsWith(root) || !Files.isRegularFile(file)) {
+        throw new NoSuchElementException("pipeline output is not available");
+      }
+      return file;
+    } catch (InvalidPathException | IOException exception) {
+      throw new NoSuchElementException("pipeline output is not available", exception);
+    }
+  }
+
+  private static long exactLong(JsonNode node, String field) {
+    JsonNode value = node.path(field);
+    if (!value.isIntegralNumber() || !value.canConvertToLong()) {
+      throw new IllegalArgumentException("invalid persisted counter");
+    }
+    return value.longValue();
+  }
+
+  private static String requiredText(JsonNode node, String field) {
+    JsonNode value = node.path(field);
+    if (!value.isTextual()) throw new IllegalArgumentException("invalid dead-letter record");
+    return value.textValue();
+  }
+
+  private static PipelineRunMetrics emptyMetrics() {
+    return new PipelineRunMetrics(new PipelineCounters(0, 0, 0, 0, 0, 0), 0, 0, 0, 0, 0);
   }
 
   private final class Listener implements PipelineExecutionListener {
     private final UUID runId;
     private final UUID pipelineId;
+    private final ActiveRun activeRun;
 
-    private Listener(UUID runId, UUID pipelineId) {
+    private Listener(UUID runId, UUID pipelineId, ActiveRun activeRun) {
       this.runId = runId;
       this.pipelineId = pipelineId;
+      this.activeRun = activeRun;
     }
 
+    @Override
     public void onRunning() {
-      running(runId);
+      PipelineRunResponse response = persistence.running(runId);
+      monitor.state(runId, response.state(), false);
     }
 
-    public void onCompleted(PipelineReport report) {
-      completed(runId, pipelineId, report);
+    @Override
+    public void onCompleted(PipelineExecutionResult result) {
+      try {
+        PipelineRunResponse response = persistence.finish(runId, result);
+        boolean outputAvailable =
+            response.state() == PipelineRunState.COMPLETED
+                && result.report().outcome() == PipelineOutcome.COMPLETED
+                && result.outputArtifactPath().isPresent();
+        monitor.state(runId, response.state(), outputAvailable);
+        if (response.state() == PipelineRunState.FAILED) failed.increment();
+        else completed.increment();
+      } finally {
+        completeActive();
+      }
     }
 
+    @Override
     public void onFailed(Throwable failure) {
-      failed(runId, pipelineId, failure);
+      try {
+        PipelineRunResponse response = persistence.fail(runId, failure);
+        monitor.state(runId, response.state(), false);
+        failed.increment();
+      } finally {
+        completeActive();
+      }
+    }
+
+    @Override
+    public void onMetrics(PipelineRunMetrics metrics) {
+      monitor.metrics(runId, metrics);
+    }
+
+    @Override
+    public void onDeadLetter(DeadLetterRecord record) {
+      monitor.deadLetter(runId, record);
+    }
+
+    private void completeActive() {
+      activeRun.complete();
+      active.remove(pipelineId, activeRun);
+    }
+  }
+
+  private static final class ActiveRun {
+    private UUID runId;
+    private PipelineExecutionHandle handle;
+    private boolean cancelRequested;
+    private boolean complete;
+
+    private synchronized void assign(UUID runId) {
+      this.runId = runId;
+    }
+
+    private synchronized boolean matches(UUID runId) {
+      return this.runId != null && this.runId.equals(runId);
+    }
+
+    private synchronized void attach(PipelineExecutionHandle handle) {
+      this.handle = handle;
+      if (cancelRequested && !complete) handle.cancel();
+    }
+
+    private synchronized void cancel() {
+      cancelRequested = true;
+      if (handle != null && !complete) handle.cancel();
+    }
+
+    private synchronized void complete() {
+      complete = true;
     }
   }
 }

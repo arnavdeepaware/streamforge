@@ -1,27 +1,16 @@
-import { render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import App from './App';
+import { renderDashboard } from './test/renderDashboard';
 
 describe('StreamForge dashboard shell', () => {
-  it('renders the Dashboard placeholder route', () => {
-    render(
-      <MemoryRouter
-        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
-        initialEntries={['/dashboard']}
-      >
-        <App />
-      </MemoryRouter>,
-    );
+  it('renders accessible primary navigation', () => {
+    renderDashboard('/stream-inspector');
 
     expect(
-      screen.getByRole('heading', { name: 'Dashboard' }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/functionality is not implemented yet/i),
-    ).toBeInTheDocument();
-    expect(
       screen.getByRole('navigation', { name: 'Primary navigation' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Stream Inspector' }),
     ).toBeInTheDocument();
   });
 });

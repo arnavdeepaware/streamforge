@@ -12,5 +12,5 @@ import org.springframework.context.annotation.Configuration;
             title = "StreamForge Control Plane API",
             version = "v1",
             description =
-                "Versioned definitions and validation APIs; pipeline execution is not exposed."))
+                "Versioned definition, local-run lifecycle, monitoring, and validation APIs."))
 public class OpenApiConfiguration {}

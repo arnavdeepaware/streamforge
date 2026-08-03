@@ -2,15 +2,25 @@
 
 StreamForge is a planned configurable platform for ingesting real-time market data, normalizing it into a canonical event model, applying safe declarative transformations, and delivering it to multiple output formats and transports.
 
-The Java 21 backend Maven reactor includes immutable market-data value types, STP v1 codecs, a deterministic tick simulator, a local TCP generator-to-parser path, streaming JSONL and CSV output sinks, and a local in-process pipeline runner for STP binary, JSONL, and CSV files. The React/Vite dashboard contains only accessible placeholder routes; no dashboard integration or infrastructure service has been implemented yet.
+The Java 21 backend Maven reactor includes immutable market-data value types, STP v1 codecs, a deterministic tick simulator, a local TCP generator-to-parser path, streaming JSONL and CSV output sinks, and a local in-process pipeline runner for STP binary, JSONL, and CSV files. The React/Vite dashboard reads pipeline definitions and schema catalog entries from the versioned control-plane API, provides guided pipeline creation and safe field mapping, and shows bounded local run health and dead-letter summaries.
 
 The local pipeline runner can also quarantine record-level failures to a staged JSONL dead-letter
 file with deterministic IDs and opt-in, bounded payload capture. Distributed dead-letter handling
 is not implemented.
 
 The control plane is a separate Spring Boot service that persists validated, credential-free
-pipeline definitions and revisions in PostgreSQL. It does not execute pipelines or authenticate
-users. See [`backend/control-plane/README.md`](backend/control-plane/README.md) for local startup.
+pipeline definitions and revisions in PostgreSQL, and runs finite local revisions with bounded
+live monitoring, safe dead-letter summaries, SSE updates, and managed output downloads. HTTP runs
+accept relative input and output paths only: inputs stay beneath a configured input root, while
+outputs and dead letters stay beneath a server-owned artifact root. It does not authenticate users.
+See [`docs/mvp-demo.md`](docs/mvp-demo.md) for the verified local monitoring walkthrough and
+[`backend/control-plane/README.md`](backend/control-plane/README.md) for service startup.
+
+Run the self-checking MVP demo with Docker available:
+
+```sh
+./scripts/run-mvp-demo.sh
+```
 
 Verify the backend from the repository root:
 
@@ -65,6 +75,8 @@ Run the dashboard development server:
 ```sh
 npm --prefix web-dashboard run dev
 ```
+
+The dashboard uses `VITE_CONTROL_PLANE_API_URL`, defaulting to `/api/v1`. During local Vite development, that relative path is proxied to `http://localhost:8080`; override the proxy target with `VITE_CONTROL_PLANE_PROXY_TARGET` when needed. See [`web-dashboard/.env.example`](web-dashboard/.env.example).
 
 Run dashboard checks:
 

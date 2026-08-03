@@ -42,6 +42,12 @@ public class PipelineRunEntity extends AuditedEntity {
   @Column(name = "finished_at")
   private Instant finishedAt;
 
+  @Column(name = "output_artifact_path", length = 1024)
+  private String outputArtifactPath;
+
+  @Column(name = "dead_letter_artifact_path", length = 1024)
+  private String deadLetterArtifactPath;
+
   protected PipelineRunEntity() {}
 
   public PipelineRunEntity(
@@ -84,6 +90,14 @@ public class PipelineRunEntity extends AuditedEntity {
     return finishedAt;
   }
 
+  public String outputArtifactPath() {
+    return outputArtifactPath;
+  }
+
+  public String deadLetterArtifactPath() {
+    return deadLetterArtifactPath;
+  }
+
   public void transition(PipelineRunState target, String failure) {
     if (!state.canTransitionTo(target))
       throw new IllegalStateException(
@@ -94,13 +108,22 @@ public class PipelineRunEntity extends AuditedEntity {
     if (failure != null && !failure.isBlank()) failureSummary = failure;
   }
 
-  public void complete(String report) {
+  public void complete(String report, String outputArtifactPath, String deadLetterArtifactPath) {
     finalReport = report;
+    this.outputArtifactPath = outputArtifactPath;
+    this.deadLetterArtifactPath = deadLetterArtifactPath;
     transition(PipelineRunState.COMPLETED, null);
   }
 
-  public void stop(String report) {
+  public void stop(String report, String deadLetterArtifactPath) {
     finalReport = report;
+    this.deadLetterArtifactPath = deadLetterArtifactPath;
     transition(PipelineRunState.STOPPED, null);
+  }
+
+  public void fail(String report, String summary, String deadLetterArtifactPath) {
+    finalReport = report;
+    this.deadLetterArtifactPath = deadLetterArtifactPath;
+    transition(PipelineRunState.FAILED, summary);
   }
 }
