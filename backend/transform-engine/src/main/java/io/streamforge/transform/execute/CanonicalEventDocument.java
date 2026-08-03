@@ -1,5 +1,6 @@
 package io.streamforge.transform.execute;
 
+import io.streamforge.common.model.CanonicalEvent;
 import io.streamforge.common.model.FixedDecimal;
 import io.streamforge.transform.config.FieldPath;
 import java.util.Collections;
@@ -18,6 +19,11 @@ public final class CanonicalEventDocument {
 
   static CanonicalEventDocument fromMutable(Map<String, Object> root) {
     return new CanonicalEventDocument(root);
+  }
+
+  /** Creates a detached exact document view of a canonical event. */
+  public static CanonicalEventDocument fromCanonicalEvent(CanonicalEvent event) {
+    return new CanonicalEventDocument(CanonicalEventDocumentFactory.mutableDocument(event));
   }
 
   /** Returns an immutable root document containing only safe scalar values and nested objects. */

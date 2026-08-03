@@ -109,3 +109,24 @@ limit breach produces `Failed` and never returns a partially transformed documen
 
 [`../examples/transformation-v1-trade-example.json`](../examples/transformation-v1-trade-example.json)
 is an executable v1 fixture. It runs all operation families against a canonical `Trade` event.
+
+## Output Blueprints
+
+[`output-blueprint-v1.schema.json`](output-blueprint-v1.schema.json) defines a separate safe,
+typed output-shaping contract. A blueprint is compiled before startup and can reference either a
+canonical field or a field in a supplied compiled transformation output schema. Its only values are
+references, exact scalar literals, nested objects, explicitly listed arrays, two allowlisted
+formatters, and conditional inclusion. It has no string interpolation, templates, callbacks, or
+expression evaluation.
+
+`FIXED_DECIMAL_PLAIN` formats a fixed decimal at the output string boundary, and
+`TIMESTAMP_ISO_UTC` renders a nanosecond timestamp as an ISO-8601 UTC string. Direct references
+retain their `String`, `Boolean`, exact `Long`, or `FixedDecimal` type. Conditional values are
+omitted when their restricted comparison condition is false.
+
+`OutputBlueprintService` exposes startup `compile` and one-event `preview` APIs. The compiler and
+renderer enforce configured maximum nesting depth and output field count. A missing field on a
+particular event variant becomes a typed preview failure rather than a partial document.
+
+[`../examples/aapl-output-blueprint-v1.json`](../examples/aapl-output-blueprint-v1.json) renders an
+AAPL Add Order into nested event, order, flags, and version output fields.
