@@ -65,7 +65,6 @@ public final class TransformationCompiler {
       int operationIndex)
       throws TransformationValidationException {
     Set<FieldPath> selected = new HashSet<>();
-    List<FieldDefinition> resolved = new ArrayList<>();
     for (FieldPath path : operation.fields()) {
       if (!selected.add(path)) {
         throw failure(
@@ -73,10 +72,10 @@ public final class TransformationCompiler {
             operationIndex,
             "select contains duplicate field: " + path);
       }
-      resolved.add(requireField(path, fields, operationIndex));
+      requireField(path, fields, operationIndex);
     }
     fields.entrySet().removeIf(entry -> !preservedBySelect(entry.getValue(), selected, fields));
-    return new CompiledOperation.Select(resolved);
+    return new CompiledOperation.Select(new ArrayList<>(fields.values()));
   }
 
   private boolean preservedBySelect(

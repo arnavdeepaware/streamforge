@@ -1,9 +1,9 @@
 # Transformation Configuration v1.0
 
 [`transformation-v1.schema.json`](transformation-v1.schema.json) defines the implemented JSON
-configuration shape for StreamForge's safe declarative transformation DSL. The backend can parse
-the raw configuration and compile it against a known field schema. Event transformation execution
-is not implemented yet.
+configuration shape for StreamForge's safe declarative transformation DSL. The backend parses the
+raw configuration, compiles it against a known field schema, and executes the compiled rules
+against a detached canonical-event document view.
 
 ## Processing Boundary
 
@@ -11,6 +11,7 @@ Configuration activation has two explicit stages:
 
 1. `TransformationConfigParser` parses JSON into a closed raw operation and condition hierarchy.
 2. `TransformationCompiler` resolves field paths and types into immutable compiled rules.
+3. `TransformationExecutor` applies that compiled plan in order to each independent event.
 
 Compilation applies operations in document order. A source field must exist at the point it is
 referenced. A destination parent must already exist as an object; `create_object` can create that
@@ -53,8 +54,11 @@ The compiler accepts identity casts plus these conversions:
 - `ENUM` to `STRING`.
 - `TIMESTAMP_NANOS` to `STRING` or `INT64`.
 
-Execution-time parsing, overflow, and exactness rules will be implemented before casts execute. A
-compiled rule does not imply that event execution currently exists.
+At execution time, casts reject invalid text and overflow. String-to-fixed-decimal conversion uses
+an exact digit parser and requires a scale from `0` through `18`; no floating-point or
+`BigDecimal` value is used. `scale_fixed_decimal` uses checked integer powers of ten, so a scale
+reduction that would discard a nonzero digit or a scale increase that overflows the signed mantissa
+fails for that event. An `enum_map` fails if the source value has no mapping entry.
 
 ## Conditions
 
@@ -85,3 +89,23 @@ The following are deliberately unsupported:
 
 Adding an operation or widening a type rule requires a versioned schema change, explicit Java AST
 types, compiler validation, security review, and tests.
+
+## Execution Results and Limits
+
+An executor is created with a `CompiledTransformation`, never raw JSON, so parsing and compilation
+happen once at configuration activation rather than once per event. `execute` returns exactly one
+typed result:
+
+- `Transformed` contains an immutable document view with `String`, `Boolean`, exact `Long`,
+  `FixedDecimal`, and nested object values only.
+- `Filtered` retains the immutable source `CanonicalEvent` when a filter condition evaluates to
+  false.
+- `Failed` contains a failure code, operation index, operation name, field path, and detail. It
+  does not throw into unrelated event processing.
+
+`TransformationExecutionLimits` bounds the compiled operation count, nested object depth, and
+total output field count for each event. Limits are checked before and after each operation. A
+limit breach produces `Failed` and never returns a partially transformed document.
+
+[`../examples/transformation-v1-trade-example.json`](../examples/transformation-v1-trade-example.json)
+is an executable v1 fixture. It runs all operation families against a canonical `Trade` event.

@@ -6,7 +6,7 @@ import io.streamforge.transform.config.TypedValue;
 import java.util.List;
 import java.util.Map;
 
-/** Closed set of field-resolved operations; execution is intentionally not implemented. */
+/** Closed set of field-resolved operations consumed by the deterministic executor. */
 public sealed interface CompiledOperation
     permits CompiledOperation.Select,
         CompiledOperation.Rename,

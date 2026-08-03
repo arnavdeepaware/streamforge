@@ -1,0 +1,45 @@
+{
+  "schemaVersion": "1.0",
+  "operations": [
+    { "op": "create_object", "path": "enrichment" },
+    {
+      "op": "add_constant",
+      "path": "enrichment.pipeline",
+      "value": { "type": "STRING", "value": "trade-example" }
+    },
+    {
+      "op": "conditional_field",
+      "path": "enrichment.large",
+      "condition": {
+        "type": "comparison",
+        "field": "payload.quantity",
+        "operator": "GT",
+        "value": { "type": "INT64", "value": 50 }
+      },
+      "whenTrue": { "type": "BOOLEAN", "value": true },
+      "whenFalse": { "type": "BOOLEAN", "value": false }
+    },
+    {
+      "op": "filter",
+      "condition": {
+        "type": "comparison",
+        "field": "payload.price",
+        "operator": "GTE",
+        "value": { "type": "FIXED_DECIMAL", "mantissa": 10000, "scale": 2 }
+      }
+    },
+    {
+      "op": "enum_map",
+      "path": "payload.aggressorSide",
+      "mapping": { "BUY": "B", "SELL": "S" }
+    },
+    { "op": "scale_fixed_decimal", "path": "payload.price", "targetScale": 4 },
+    { "op": "cast", "path": "payload.quantity", "toType": "FIXED_DECIMAL" },
+    { "op": "rename", "from": "instrument.symbol", "to": "instrument.ticker" },
+    { "op": "remove", "path": "payload.aggressorSide" },
+    {
+      "op": "select",
+      "fields": ["instrument.ticker", "payload.price", "payload.quantity", "enrichment"]
+    }
+  ]
+}
