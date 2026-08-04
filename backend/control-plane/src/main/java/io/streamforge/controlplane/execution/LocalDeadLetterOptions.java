@@ -8,7 +8,7 @@ public record LocalDeadLetterOptions(
   public static final int MAXIMUM_PAYLOAD_BYTES = 1_048_576;
 
   public LocalDeadLetterOptions {
-    if (policy == null || maximumPayloadBytes < 0 || maximumPayloadBytes > MAXIMUM_PAYLOAD_BYTES) {
+    if (policy == null || maximumPayloadBytes <= 0 || maximumPayloadBytes > MAXIMUM_PAYLOAD_BYTES) {
       throw new IllegalArgumentException("dead-letter options are invalid");
     }
     if (policy != DeadLetterPolicy.QUARANTINE && includePayload) {
