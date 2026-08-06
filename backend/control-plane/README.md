@@ -54,7 +54,8 @@ export STREAMFORGE_LOCAL_PIPELINE_WORKSPACE="$PWD/.streamforge/workspace"
 mkdir -p "$STREAMFORGE_LOCAL_PIPELINE_INPUT_ROOT" \
   "$STREAMFORGE_LOCAL_PIPELINE_ARTIFACT_ROOT" \
   "$STREAMFORGE_LOCAL_PIPELINE_WORKSPACE"
-./backend/mvnw -f backend/pom.xml -pl control-plane -am spring-boot:run
+./backend/mvnw -f backend/pom.xml -pl control-plane -am -DskipTests install
+./backend/mvnw -f backend/pom.xml -pl control-plane spring-boot:run
 ```
 
 Confirm health in a second terminal:

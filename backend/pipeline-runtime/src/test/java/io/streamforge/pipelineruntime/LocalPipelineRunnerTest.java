@@ -18,6 +18,7 @@ import io.streamforge.parserengine.csv.CsvTimestampFormat;
 import io.streamforge.pipelineruntime.output.CsvOutputColumn;
 import io.streamforge.pipelineruntime.output.CsvOutputConfig;
 import io.streamforge.stp.protocol.AddOrderMessage;
+import io.streamforge.stp.protocol.CancelOrderMessage;
 import io.streamforge.stp.protocol.ExecuteOrderMessage;
 import io.streamforge.stp.protocol.FrameHeader;
 import io.streamforge.stp.protocol.MessageType;
@@ -155,6 +156,66 @@ class LocalPipelineRunnerTest {
             });
     assertThat(Files.readString(output))
         .contains("\"type\":\"ORDER_ADDED\"")
+        .contains("\"type\":\"ORDER_EXECUTED\"")
+        .contains("\"symbol\":\"AAPL\"");
+  }
+
+  @Test
+  void keepsStpInstrumentStateAfterPartialCancelUntilOrderIsFullyClosed() throws Exception {
+    Path input = temporaryDirectory.resolve("partial-cancel.stp");
+    StpEncoder encoder = new StpEncoder();
+    OrderId orderId = new OrderId(88);
+    Files.write(
+        input,
+        join(
+            encoder.encode(
+                new AddOrderMessage(
+                    new FrameHeader(
+                        StpProtocol.ADD_ORDER_ENCODED_LENGTH,
+                        MessageType.ADD_ORDER,
+                        new SequenceNumber(1),
+                        new EventTimestamp(1_000_000_000L)),
+                    orderId,
+                    new InstrumentSymbol("AAPL"),
+                    Side.BUY,
+                    new Quantity(100),
+                    new FixedDecimal(12_345, 2))),
+            encoder.encode(
+                new CancelOrderMessage(
+                    new FrameHeader(
+                        StpProtocol.CANCEL_ORDER_ENCODED_LENGTH,
+                        MessageType.CANCEL_ORDER,
+                        new SequenceNumber(2),
+                        new EventTimestamp(1_000_000_100L)),
+                    orderId,
+                    new Quantity(40))),
+            encoder.encode(
+                new ExecuteOrderMessage(
+                    new FrameHeader(
+                        StpProtocol.EXECUTE_ORDER_ENCODED_LENGTH,
+                        MessageType.EXECUTE_ORDER,
+                        new SequenceNumber(3),
+                        new EventTimestamp(1_000_000_200L)),
+                    orderId,
+                    new Quantity(60)))));
+    Path output = temporaryDirectory.resolve("partial-cancel.jsonl");
+    PipelineRunConfig config =
+        new PipelineRunConfig(
+            new PipelineInput.StpBinary(
+                input,
+                new SourceIdentity("stp/partial-cancel"),
+                new Venue("XNAS"),
+                StpProtocol.LENGTH_FIELD_WIDTH + StpProtocol.MAX_ENCODED_LENGTH),
+            Optional.empty(),
+            Optional.empty(),
+            new PipelineOutput.JsonLines(output));
+
+    PipelineReport report = new LocalPipelineRunner().run(config, new PipelineCancellation());
+
+    assertThat(report.counters()).isEqualTo(new PipelineCounters(3, 3, 3, 0, 3, 0));
+    assertThat(report.failures()).isEmpty();
+    assertThat(Files.readString(output))
+        .contains("\"type\":\"ORDER_CANCELLED\"")
         .contains("\"type\":\"ORDER_EXECUTED\"")
         .contains("\"symbol\":\"AAPL\"");
   }
