@@ -33,6 +33,7 @@ import io.streamforge.pipelineruntime.output.OutputSink;
 import io.streamforge.pipelineruntime.output.OutputSinkException;
 import io.streamforge.stp.protocol.AddOrderMessage;
 import io.streamforge.stp.protocol.CancelOrderMessage;
+import io.streamforge.stp.protocol.ExecuteOrderMessage;
 import io.streamforge.stp.protocol.IncrementalStpDecoder;
 import io.streamforge.stp.protocol.ParsedStpFrame;
 import io.streamforge.stp.protocol.StpDecodeResult;
@@ -344,7 +345,7 @@ public final class LocalPipelineRunner {
       throws IOException, OutputSinkException {
     IncrementalStpDecoder decoder = new IncrementalStpDecoder(input.maximumFrameSize(), false);
     StpNormalizer normalizer = new StpNormalizer();
-    Map<OrderId, InstrumentReference> instruments = new HashMap<>();
+    Map<OrderId, StpOrderState> orders = new HashMap<>();
     try (InputStream stream = new BufferedInputStream(Files.newInputStream(input.path()))) {
       byte[] bytes = new byte[STP_READ_BUFFER_SIZE];
       int count;
@@ -352,15 +353,7 @@ public final class LocalPipelineRunner {
         Optional<DeadLetterPayload> chunkPayload = state.captureBinary(bytes, count);
         for (StpParseEvent event : decoder.feed(ByteBuffer.wrap(bytes, 0, count))) {
           processStpEvent(
-              event,
-              input,
-              normalizer,
-              instruments,
-              chunkPayload,
-              prepared,
-              sink,
-              cancellation,
-              state);
+              event, input, normalizer, orders, chunkPayload, prepared, sink, cancellation, state);
         }
       }
       if (!cancellation.isCancelled()) {
@@ -369,7 +362,7 @@ public final class LocalPipelineRunner {
               event,
               input,
               normalizer,
-              instruments,
+              orders,
               Optional.empty(),
               prepared,
               sink,
@@ -384,7 +377,7 @@ public final class LocalPipelineRunner {
       StpParseEvent event,
       PipelineInput.StpBinary input,
       StpNormalizer normalizer,
-      Map<OrderId, InstrumentReference> instruments,
+      Map<OrderId, StpOrderState> orders,
       Optional<DeadLetterPayload> rawPayload,
       PreparedPipeline prepared,
       OutputSink sink,
@@ -413,7 +406,10 @@ public final class LocalPipelineRunner {
           state.trackSequence(input.source().value(), message.header().sequenceNumber().value());
         }
         if (decoded instanceof AddOrderMessage addOrder) {
-          instruments.put(addOrder.orderId(), new InstrumentReference(addOrder.symbol()));
+          orders.put(
+              addOrder.orderId(),
+              new StpOrderState(
+                  new InstrumentReference(addOrder.symbol()), addOrder.quantity().value()));
         }
         StpNormalizationResult normalized =
             normalizer.normalize(
@@ -424,7 +420,8 @@ public final class LocalPipelineRunner {
                     Optional.empty(),
                     new RawEventReference(
                         "stp:" + input.source().value() + ":frame:" + frameNumber),
-                    orderId -> Optional.ofNullable(instruments.get(orderId))));
+                    orderId ->
+                        Optional.ofNullable(orders.get(orderId)).map(StpOrderState::instrument)));
         switch (normalized) {
           case NormalizedStpEvent success -> {
             state.normalized++;
@@ -443,11 +440,27 @@ public final class LocalPipelineRunner {
                   rawPayload);
         }
         if (decoded instanceof CancelOrderMessage cancel) {
-          instruments.remove(cancel.orderId());
+          reduceRemainingQuantity(orders, cancel.orderId(), cancel.canceledQuantity().value());
+        } else if (decoded instanceof ExecuteOrderMessage execute) {
+          reduceRemainingQuantity(orders, execute.orderId(), execute.executedQuantity().value());
         }
       }
     }
     state.publishMetrics();
+  }
+
+  private static void reduceRemainingQuantity(
+      Map<OrderId, StpOrderState> orders, OrderId orderId, long quantity) {
+    StpOrderState order = orders.get(orderId);
+    if (order == null) {
+      return;
+    }
+    long remaining = order.remainingQuantity() - quantity;
+    if (remaining <= 0) {
+      orders.remove(orderId);
+    } else {
+      orders.put(orderId, new StpOrderState(order.instrument(), remaining));
+    }
   }
 
   private void processCanonical(
@@ -793,6 +806,8 @@ public final class LocalPipelineRunner {
       store.ifPresent(JsonLinesDeadLetterStore::close);
     }
   }
+
+  private record StpOrderState(InstrumentReference instrument, long remainingQuantity) {}
 
   private static final class Stopped extends RuntimeException {
     private static final Stopped INSTANCE = new Stopped();
