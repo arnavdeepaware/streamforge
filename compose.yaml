@@ -1,0 +1,65 @@
+name: streamforge
+
+services:
+  postgres:
+    image: postgres:16.8-alpine
+    environment:
+      POSTGRES_DB: streamforge
+      POSTGRES_USER: streamforge
+      POSTGRES_PASSWORD: streamforge-local
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U streamforge -d streamforge"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    volumes:
+      - control-plane-postgres:/var/lib/postgresql/data
+
+  control-plane:
+    build:
+      context: .
+      dockerfile: backend/control-plane/Dockerfile
+    environment:
+      CONTROL_PLANE_DB_URL: jdbc:postgresql://postgres:5432/streamforge
+      CONTROL_PLANE_DB_USERNAME: streamforge
+      CONTROL_PLANE_DB_PASSWORD: streamforge-local
+      STREAMFORGE_LOCAL_PIPELINE_INPUT_ROOT: /data/input
+      STREAMFORGE_LOCAL_PIPELINE_WORKSPACE: /data/workspace
+      STREAMFORGE_LOCAL_PIPELINE_ARTIFACT_ROOT: /data/artifacts
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/actuator/health/readiness"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 20s
+    ports:
+      - "8080:8080"
+    volumes:
+      - ${STREAMFORGE_INPUT_DIR:-./schemas/examples}:/data/input:ro
+      - pipeline-workspace:/data/workspace
+      - pipeline-artifacts:/data/artifacts
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: web-dashboard/Dockerfile
+    depends_on:
+      control-plane:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://localhost:5173/"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    ports:
+      - "5173:5173"
+
+volumes:
+  control-plane-postgres:
+  pipeline-workspace:
+  pipeline-artifacts:

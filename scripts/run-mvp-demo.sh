@@ -35,7 +35,7 @@ cleanup_on_failure() {
 trap cleanup_on_failure EXIT
 trap 'exit 130' INT TERM
 
-for command in curl docker java npm sed wc; do require "$command"; done
+for command in cmp curl docker java npm sed wc; do require "$command"; done
 mkdir -p "$input_root" "$artifact_root" "$workspace"
 cat >"$compose_env" <<'EOF'
 POSTGRES_DB=streamforge
@@ -55,7 +55,7 @@ db_port="$(docker compose -p "$compose_project" --env-file "$compose_env" \
   exit 1
 }
 
-for attempt in {1..60}; do
+for _ in {1..60}; do
   if docker compose -p "$compose_project" --env-file "$compose_env" \
     -f infrastructure/compose/docker-compose.yml exec -T postgres \
     pg_isready -U streamforge -d streamforge >/dev/null 2>&1; then
@@ -82,12 +82,12 @@ control_plane_pid=$!
 npm --prefix web-dashboard run dev -- --host 127.0.0.1 >"$dashboard_log" 2>&1 &
 dashboard_pid=$!
 
-for attempt in {1..60}; do
-  if curl --silent --fail http://localhost:8080/actuator/health >/dev/null; then break; fi
+for _ in {1..60}; do
+  if curl --silent --fail http://localhost:8080/actuator/health/readiness >/dev/null; then break; fi
   sleep 1
 done
-curl --silent --fail http://localhost:8080/actuator/health >/dev/null
-for attempt in {1..60}; do
+curl --silent --fail http://localhost:8080/actuator/health/readiness >/dev/null
+for _ in {1..60}; do
   if curl --silent --fail http://127.0.0.1:5173 >/dev/null; then break; fi
   sleep 1
 done
@@ -137,7 +137,7 @@ run_id="$(printf '%s' "$run_response" | sed -nE 's/^\{"runId":"([^"]+)".*/\1/p')
 
 run_url="http://localhost:8080/api/v1/pipelines/$pipeline_id/runs/$run_id"
 state=""
-for attempt in {1..120}; do
+for _ in {1..120}; do
   run_response="$(curl --silent --show-error --fail "$run_url")"
   state="$(printf '%s' "$run_response" | sed -nE 's/.*"state":"([A-Z]+)".*/\1/p')"
   if [[ "$state" == "COMPLETED" || "$state" == "STOPPED" || "$state" == "FAILED" ]]; then
@@ -155,6 +155,7 @@ monitoring="$(curl --silent --show-error --fail "$monitoring_url")"
 printf '%s' "$monitoring" | grep -q '"emitted":10000'
 printf '%s' "$monitoring" | grep -q '"failed":1'
 printf '%s' "$monitoring" | grep -q '"outputAvailable":true'
+printf '%s' "$monitoring" | grep -q '"rawCaptureAvailable":true'
 dead_letters="$(curl --silent --show-error --fail "$run_url/dead-letters")"
 dead_letter_count="$(printf '%s' "$dead_letters" | grep -o '"failureId"' | wc -l | tr -d ' ')"
 [[ "$dead_letter_count" == "1" ]] || {
@@ -170,10 +171,15 @@ line_count="$(wc -l <"$workdir/downloaded-output.jsonl" | tr -d ' ')"
   exit 1
 }
 
+raw_download_url="$run_url/raw-capture"
+curl --silent --show-error --fail "$raw_download_url" --output "$workdir/downloaded-raw.capture"
+cmp "$input_root/ticks.stp" "$workdir/downloaded-raw.capture"
+
 printf '\nMVP demo verified successfully.\n'
 printf 'Pipeline page: http://127.0.0.1:5173/pipelines/%s\n' "$pipeline_id"
 printf 'Run ID: %s\n' "$run_id"
 printf 'Download endpoint: %s\n' "$download_url"
+printf 'Raw capture endpoint: %s\n' "$raw_download_url"
 printf 'Artifact root: %s\n' "$artifact_root"
 printf 'Control-plane log: %s\nDashboard log: %s\n' "$control_plane_log" "$dashboard_log"
 printf 'Shutdown: kill %s %s; docker compose -p %s --env-file %s -f %s down\n' \

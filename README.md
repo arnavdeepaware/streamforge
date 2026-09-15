@@ -1,110 +1,71 @@
-# StreamForge
+# StreamForge 1.0
 
-StreamForge is a planned configurable platform for ingesting real-time market data, normalizing it into a canonical event model, applying safe declarative transformations, and delivering it to multiple output formats and transports.
+StreamForge is a local, single-node market-data normalization product. It ingests STP binary,
+CSV, or JSONL files; captures every input byte before parsing; normalizes through an exact typed
+canonical model; applies validated declarative transformations and blueprints; and atomically
+publishes JSONL, CSV, or explicitly typed Parquet output. A PostgreSQL control plane and React
+dashboard provide versioned configuration, run lifecycle, bounded monitoring, dead-letter
+inspection, and artifact downloads.
 
-The Java 21 backend Maven reactor includes immutable market-data value types, STP v1 codecs, a deterministic tick simulator, a local TCP generator-to-parser path, streaming JSONL and CSV output sinks, and a local in-process pipeline runner for STP binary, JSONL, and CSV files. The React/Vite dashboard reads pipeline definitions and schema catalog entries from the versioned control-plane API, provides guided pipeline creation and safe field mapping, and shows bounded local run health and dead-letter summaries.
+## Start the product
 
-The local pipeline runner can also quarantine record-level failures to a staged JSONL dead-letter
-file with deterministic IDs and opt-in, bounded payload capture. Distributed dead-letter handling
-is not implemented.
-
-The control plane is a separate Spring Boot service that persists validated, credential-free
-pipeline definitions and revisions in PostgreSQL, and runs finite local revisions with bounded
-live monitoring, safe dead-letter summaries, SSE updates, and managed output downloads. HTTP runs
-accept relative input and output paths only: inputs stay beneath a configured input root, while
-outputs and dead letters stay beneath a server-owned artifact root. It does not authenticate users.
-See [`docs/mvp-demo.md`](docs/mvp-demo.md) for the verified local monitoring walkthrough and
-[`backend/control-plane/README.md`](backend/control-plane/README.md) for service startup.
-
-Run the self-checking MVP demo with Docker available:
+Requirements: Docker with Compose support. From the repository root:
 
 ```sh
-./scripts/run-mvp-demo.sh
+docker compose up --build
 ```
 
-Verify the backend from the repository root:
+Then open:
+
+- Dashboard: <http://localhost:5173>
+- API and OpenAPI: <http://localhost:8080/swagger-ui/index.html>
+- Readiness: <http://localhost:8080/actuator/health/readiness>
+- Prometheus metrics: <http://localhost:8080/actuator/prometheus>
+
+PostgreSQL is available only inside the Compose network. Database state, temporary workspace, and
+run artifacts use named volumes. By default, pipeline input paths are relative to
+`schemas/examples`. Set `STREAMFORGE_INPUT_DIR` before startup to mount another host directory
+read-only:
+
+```sh
+STREAMFORGE_INPUT_DIR=/absolute/path/to/input docker compose up --build
+```
+
+Raw captures and output artifacts are retained until the corresponding Docker volume is removed;
+v1 retention is manual.
+
+## Developer verification
+
+Host builds are developer alternatives, not the supported user installation path. Use Java 21 and
+Node 22:
 
 ```sh
 ./backend/mvnw -f backend/pom.xml verify
-```
-
-Generate a deterministic binary STP fixture on a POSIX shell:
-
-```sh
-./backend/mvnw -f backend/pom.xml -pl tick-simulator -am package
-java -cp backend/tick-simulator/target/classes:backend/stp-protocol/target/classes:backend/common-model/target/classes \
-  io.streamforge.ticksimulator.TickSimulatorCli \
-  --seed 5 --symbols AAPL,MSFT --count 100 --output ticks.stp
-```
-
-## Local TCP Demo
-
-Build both local components first:
-
-```sh
-./backend/mvnw -f backend/pom.xml -pl tick-simulator,parser-engine -am package
-```
-
-Terminal 1 starts a server that exits after serving its first finite client:
-
-```sh
-java -cp backend/tick-simulator/target/classes:backend/stp-protocol/target/classes:backend/common-model/target/classes \
-  io.streamforge.ticksimulator.TickTcpServerCli \
-  --host 127.0.0.1 --port 9010 --seed 5 --symbols AAPL,MSFT --count 10 --rate 0
-```
-
-Terminal 2 connects, incrementally decodes the STP frames, and prints each parsed event:
-
-```sh
-java -cp backend/parser-engine/target/classes:backend/stp-protocol/target/classes:backend/common-model/target/classes \
-  io.streamforge.parserengine.StpParserCli \
-  --host 127.0.0.1 --port 9010 \
-  --report-sequence-integrity --source demo-session
-```
-
-The classpath separators in these examples are for POSIX shells.
-
-Install dashboard dependencies from the repository root:
-
-```sh
 npm --prefix web-dashboard ci
-```
-
-Run the dashboard development server:
-
-```sh
-npm --prefix web-dashboard run dev
-```
-
-The dashboard uses `VITE_CONTROL_PLANE_API_URL`, defaulting to `/api/v1`. During local Vite development, that relative path is proxied to `http://localhost:8080`; override the proxy target with `VITE_CONTROL_PLANE_PROXY_TARGET` when needed. See [`web-dashboard/.env.example`](web-dashboard/.env.example).
-
-Run dashboard checks:
-
-```sh
+npm --prefix web-dashboard run format:check
 npm --prefix web-dashboard run lint
 npm --prefix web-dashboard run test
 npm --prefix web-dashboard run build
+./scripts/run-stp-benchmarks.sh
 ```
 
-## Validation
-
-Run every local quality check from the repository root:
+With Docker available, the release-level stack, artifact, metrics, and restart smoke test is:
 
 ```sh
-make check
+./scripts/run-v1-acceptance.sh
 ```
 
-Run one area at a time:
+`make check` runs the backend and dashboard quality suites. Testcontainers integration tests run
+when Docker is available and otherwise report skips. See [the release checklist](docs/v1-release-checklist.md),
+[architecture](docs/architecture.md), and [backend reference](backend/README.md).
 
-```sh
-make backend-check
-make web-check
-```
+## V1 boundary
 
-`backend-check` runs Maven Wrapper verification, including Java formatting enforcement. `web-check` runs `npm ci`, Prettier format checking, ESLint, Vitest in non-watch mode, and the Vite production build. GitHub Actions runs these same targets with Maven and npm caches.
+Implemented: exact canonical values, STP/CSV/JSONL input, mandatory immutable run capture,
+declarative transforms and blueprints, JSONL/CSV/Parquet output, local dead-letter policies,
+PostgreSQL lifecycle persistence, REST/SSE monitoring, bounded Prometheus metrics, storage health,
+and the dashboard.
 
-Remove generated build outputs with:
-
-```sh
-make clean
-```
+Deferred: authentication, distributed workers, Kafka, Redis, WebSockets, replay controls,
+order-book reconstruction, Stream Inspector, global dead-letter browsing, and schema editing. The
+`stream-worker` directory is a post-v1 placeholder and is excluded from the 1.0 Maven reactor.

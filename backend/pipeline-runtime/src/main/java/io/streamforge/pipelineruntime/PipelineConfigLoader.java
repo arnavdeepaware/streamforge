@@ -19,7 +19,12 @@ import io.streamforge.pipelineruntime.deadletter.DeadLetterConfig;
 import io.streamforge.pipelineruntime.deadletter.DeadLetterPolicy;
 import io.streamforge.pipelineruntime.output.CsvOutputColumn;
 import io.streamforge.pipelineruntime.output.CsvOutputConfig;
+import io.streamforge.pipelineruntime.output.ParquetColumnType;
+import io.streamforge.pipelineruntime.output.ParquetCompression;
+import io.streamforge.pipelineruntime.output.ParquetOutputColumn;
+import io.streamforge.pipelineruntime.output.ParquetOutputConfig;
 import io.streamforge.stp.protocol.StpProtocol;
+import io.streamforge.transform.config.FieldPath;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -28,6 +33,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.Set;
 
 /** Strict loader for a small saved local-pipeline configuration document. */
@@ -197,6 +203,12 @@ public final class PipelineConfigLoader {
             path(node, "path", location + ".path", base),
             csvOutput(required(node, "csv", location + ".csv"), location + ".csv"));
       }
+      case "PARQUET" -> {
+        requireOnly(node, location, Set.of("type", "path", "parquet"));
+        yield new PipelineOutput.Parquet(
+            path(node, "path", location + ".path", base),
+            parquetOutput(required(node, "parquet", location + ".parquet"), location + ".parquet"));
+      }
       default -> throw failure(location + ".type", "unsupported output type: " + type, null);
     };
   }
@@ -291,6 +303,51 @@ public final class PipelineConfigLoader {
               text(column, "path", columnLocation + ".path")));
     }
     return new CsvOutputConfig(parsed, bool(node, "includeHeader", location + ".includeHeader"));
+  }
+
+  private ParquetOutputConfig parquetOutput(JsonNode node, String location)
+      throws PipelineConfigurationException {
+    requireObject(node, location, Set.of("compression", "rowGroupSizeBytes", "columns"));
+    JsonNode columns = required(node, "columns", location + ".columns");
+    if (!columns.isArray() || columns.isEmpty()) {
+      throw failure(location + ".columns", "Parquet columns must be a non-empty array", null);
+    }
+    List<ParquetOutputColumn> parsed = new ArrayList<>(columns.size());
+    for (int index = 0; index < columns.size(); index++) {
+      String columnLocation = location + ".columns[" + index + "]";
+      JsonNode column = columns.get(index);
+      requireObject(column, columnLocation, Set.of("name", "path", "type", "required", "scale"));
+      parsed.add(
+          new ParquetOutputColumn(
+              text(column, "name", columnLocation + ".name"),
+              new FieldPath(text(column, "path", columnLocation + ".path")),
+              enumValue(
+                  ParquetColumnType.class,
+                  text(column, "type", columnLocation + ".type"),
+                  columnLocation + ".type"),
+              bool(column, "required", columnLocation + ".required"),
+              optionalInt(nodeAt(column, "scale"), columnLocation + ".scale")));
+    }
+    return new ParquetOutputConfig(
+        enumValue(
+            ParquetCompression.class,
+            textOrDefault(node, "compression", "SNAPPY", location + ".compression"),
+            location + ".compression"),
+        optionalInt(node, "rowGroupSizeBytes", location + ".rowGroupSizeBytes")
+            .orElse((int) ParquetOutputConfig.DEFAULT_ROW_GROUP_SIZE_BYTES),
+        parsed);
+  }
+
+  private OptionalInt optionalInt(JsonNode value, String location)
+      throws PipelineConfigurationException {
+    if (value == null || value.isNull()) {
+      return OptionalInt.empty();
+    }
+    return OptionalInt.of(integer(value, location));
+  }
+
+  private JsonNode nodeAt(JsonNode node, String field) {
+    return node.has(field) ? node.get(field) : null;
   }
 
   private Map<String, Side> sideMapping(JsonNode node, String location)

@@ -74,12 +74,14 @@ public class PipelineRunMonitor {
       PipelineRunState state,
       PipelineRunMetrics metrics,
       List<DeadLetterResponse> deadLetters,
-      boolean outputAvailable) {
+      boolean outputAvailable,
+      boolean rawCaptureAvailable) {
     RunObservation observation =
         observations.computeIfAbsent(runId, ignored -> new RunObservation(state));
     observation.state = state;
     observation.metrics = metrics;
     observation.outputAvailable = outputAvailable;
+    observation.rawCaptureAvailable = rawCaptureAvailable;
     observation.deadLetters.clear();
     deadLetters.stream().limit(MAXIMUM_DEAD_LETTERS).forEach(observation.deadLetters::addLast);
     if (!state.active() && observation.terminalAt == null) observation.terminalAt = clock.instant();
@@ -109,6 +111,14 @@ public class PipelineRunMonitor {
       appendSample(observation, now);
       dirty.add(runId);
     }
+  }
+
+  public synchronized void artifacts(
+      UUID runId, boolean outputAvailable, boolean rawCaptureAvailable) {
+    RunObservation observation = observation(runId);
+    observation.outputAvailable = outputAvailable;
+    observation.rawCaptureAvailable = rawCaptureAvailable;
+    dirty.add(runId);
   }
 
   public synchronized void deadLetter(UUID runId, DeadLetterRecord record) {
@@ -147,6 +157,8 @@ public class PipelineRunMonitor {
         metrics.sequenceGapCount(),
         metrics.duplicateCount(),
         observation.outputAvailable,
+        observation.rawCaptureAvailable,
+        observation.rawCaptureAvailable ? "raw-input.capture" : null,
         List.copyOf(observation.history),
         List.copyOf(observation.deadLetters));
   }
@@ -231,6 +243,8 @@ public class PipelineRunMonitor {
         0,
         0,
         false,
+        false,
+        null,
         List.of(),
         List.of());
   }
@@ -295,6 +309,7 @@ public class PipelineRunMonitor {
     private final Deque<DeadLetterResponse> deadLetters = new ArrayDeque<>();
     private Instant terminalAt;
     private boolean outputAvailable;
+    private boolean rawCaptureAvailable;
 
     private RunObservation(PipelineRunState state) {
       this.state = state;

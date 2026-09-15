@@ -1,8 +1,10 @@
 # Canonical Event Schemas
 
 [`canonical-event-v1.schema.json`](canonical-event-v1.schema.json) defines the implemented JSON
-shape of the Java canonical model in `backend/common-model`. It is a serialization contract, not a
-claim that a JSON serializer or adapter has been implemented.
+shape of the Java canonical model in `backend/common-model`. JSONL and CSV adapters normalize
+through this model, while the STP adapter constructs the same model directly from validated
+frames. JSONL, CSV, and explicit-schema Parquet sinks serialize values from this canonical
+boundary.
 
 ## Version 1.0
 
@@ -22,7 +24,7 @@ payload's computed `type()` is serialized as its discriminator.
 `Optional.empty()` values are omitted rather than serialized as zero or `null`. This applies to
 `receiveTimestamp`, `Trade.aggressorSide`, and the absent side of a one-sided `Quote`. Quantities
 are always positive, while order and trade IDs and timestamps may deliberately be zero. A future
-serializer must implement these boundary mappings explicitly; no serializer is currently included.
+serializers implement these boundary mappings explicitly.
 
 JSON integer values represent exact mathematical integers. Serializers and consumers must not
 route timestamps, sequence numbers, identifiers, quantities, or price mantissas through a binary
@@ -56,3 +58,10 @@ the digest instead of accepting an unrelated ID.
   minor versions rather than silently interpreting them as another version.
 - Raw-event references remain stable across schema versions so an event can be investigated or
   normalized again from its captured source record.
+
+## Raw Capture References
+
+Every run first captures the complete input byte-for-byte and then parses the captured copy. The
+canonical event's raw reference is rewritten into the run-scoped form
+`capture:<run-id>:frame:<n>`, `capture:<run-id>:line:<n>`, or `capture:<run-id>:row:<n>`.
+References identify records within the immutable capture, not the mutable original source.

@@ -15,6 +15,8 @@ public record PipelineMonitoringResponse(
     long sequenceGapCount,
     long duplicateCount,
     boolean outputAvailable,
+    boolean rawCaptureAvailable,
+    String rawCaptureFilename,
     List<MetricSampleResponse> history,
     List<DeadLetterResponse> deadLetters) {
   public PipelineMonitoringResponse {

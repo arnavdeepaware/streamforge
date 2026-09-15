@@ -215,6 +215,8 @@ describe('pipeline dashboard pages', () => {
             },
           ],
           outputAvailable: false,
+          rawCaptureAvailable: true,
+          rawCaptureFilename: 'raw-input.capture',
         }),
       ),
     );
@@ -282,6 +284,8 @@ describe('pipeline dashboard pages', () => {
             history: [],
             deadLetters: [],
             outputAvailable: true,
+            rawCaptureAvailable: true,
+            rawCaptureFilename: 'raw-input.capture',
           }),
       ),
     );

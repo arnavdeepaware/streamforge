@@ -3,6 +3,7 @@ package io.streamforge.pipelineruntime;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.file.Path;
+import java.util.UUID;
 
 /** Command-line entry point for one saved local pipeline configuration. */
 public final class PipelineCli {
@@ -24,15 +25,31 @@ public final class PipelineCli {
       usage(output);
       return 0;
     }
-    if (arguments.length != 2 || !"--config".equals(arguments[0])) {
+    if ((arguments.length != 2 && arguments.length != 4) || !"--config".equals(arguments[0])) {
       usage(errors);
       return 2;
     }
+    Path artifactRoot = Path.of(".streamforge/artifacts");
+    if (arguments.length == 4) {
+      if (!"--artifact-root".equals(arguments[2])) {
+        usage(errors);
+        return 2;
+      }
+      artifactRoot = Path.of(arguments[3]);
+    }
     try {
       PipelineRunConfig config = new PipelineConfigLoader().load(Path.of(arguments[1]));
-      PipelineReport report = new LocalPipelineRunner().run(config, new PipelineCancellation());
+      UUID runId = UUID.randomUUID();
+      PipelineRunArtifacts artifacts =
+          new PipelineRunArtifacts(runId, artifactRoot.resolve(runId.toString()));
+      PipelineReport report =
+          new LocalPipelineRunner().run(config, new PipelineCancellation(), artifacts);
       output.println(
-          "received="
+          "runId="
+              + runId
+              + " rawCapture="
+              + artifacts.rawCapture()
+              + " received="
               + report.counters().received()
               + " parsed="
               + report.counters().parsed()
@@ -64,6 +81,7 @@ public final class PipelineCli {
   }
 
   private static void usage(PrintStream stream) {
-    stream.println("Usage: PipelineCli --config <pipeline-config.json>");
+    stream.println(
+        "Usage: PipelineCli --config <pipeline-config.json> [--artifact-root <directory>]");
   }
 }

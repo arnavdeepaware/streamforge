@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.streamforge.pipelineruntime.LocalPipelineRunner;
 import io.streamforge.pipelineruntime.PipelineCancellation;
 import io.streamforge.pipelineruntime.PipelineConfigLoader;
+import io.streamforge.pipelineruntime.PipelineRunArtifacts;
 import io.streamforge.pipelineruntime.PipelineRunObserver;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -75,7 +76,9 @@ public final class LocalPipelineExecutionBackend
                 listener.onDeadLetter(record);
               }
             };
-        var report = new LocalPipelineRunner(observer).run(runConfig, cancellation);
+        PipelineRunArtifacts artifacts =
+            new PipelineRunArtifacts(command.runId(), materialized.runArtifactDirectory());
+        var report = new LocalPipelineRunner(observer).run(runConfig, cancellation, artifacts);
         Optional<String> outputArtifact =
             Files.isRegularFile(materialized.outputFile())
                 ? Optional.of(materialized.outputArtifactPath())
@@ -84,17 +87,34 @@ public final class LocalPipelineExecutionBackend
             materialized.deadLetterFile().filter(Files::isRegularFile).isPresent()
                 ? materialized.deadLetterArtifactPath()
                 : Optional.empty();
-        result = new PipelineExecutionResult(report, outputArtifact, deadLetterArtifact);
+        Optional<String> rawCaptureArtifact =
+            Files.isRegularFile(artifacts.rawCapture())
+                ? Optional.of(materialized.rawCaptureArtifactPath())
+                : Optional.empty();
+        result =
+            new PipelineExecutionResult(
+                report, outputArtifact, deadLetterArtifact, rawCaptureArtifact);
       } finally {
         Files.deleteIfExists(config);
         Files.deleteIfExists(config.resolveSibling(config.getFileName() + ".transform.json"));
         Files.deleteIfExists(config.resolveSibling(config.getFileName() + ".blueprint.json"));
       }
     } catch (Throwable failure) {
-      listener.onFailed(failure);
+      listener.onFailed(failure, existingRawCapture(command.runId()));
       return;
     }
     listener.onCompleted(result);
+  }
+
+  private Optional<String> existingRawCapture(java.util.UUID runId) {
+    Path relative = Path.of(runId.toString(), "raw-input.capture");
+    try {
+      return Files.isRegularFile(resolveManagedArtifact(relative))
+          ? Optional.of(portable(relative))
+          : Optional.empty();
+    } catch (IOException exception) {
+      return Optional.empty();
+    }
   }
 
   private MaterializedExecution materialize(PipelineExecutionCommand command) throws IOException {
@@ -161,7 +181,10 @@ public final class LocalPipelineExecutionBackend
         outputFile,
         portable(outputRelative),
         deadLetterFile,
-        deadLetterRelative.map(LocalPipelineExecutionBackend::portable));
+        deadLetterRelative.map(LocalPipelineExecutionBackend::portable),
+        resolveManagedArtifact(Path.of(command.runId().toString(), "raw-input.capture"))
+            .getParent(),
+        portable(Path.of(command.runId().toString(), "raw-input.capture")));
   }
 
   private Path resolveInput(com.fasterxml.jackson.databind.JsonNode input) throws IOException {
@@ -223,7 +246,9 @@ public final class LocalPipelineExecutionBackend
       Path outputFile,
       String outputArtifactPath,
       Optional<Path> deadLetterFile,
-      Optional<String> deadLetterArtifactPath) {}
+      Optional<String> deadLetterArtifactPath,
+      Path runArtifactDirectory,
+      String rawCaptureArtifactPath) {}
 
   private static final class ManagedPathFailure extends RuntimeException {
     private ManagedPathFailure(IOException cause) {

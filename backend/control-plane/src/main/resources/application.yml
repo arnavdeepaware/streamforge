@@ -21,6 +21,11 @@ management:
     health:
       probes:
         enabled: true
+      group:
+        liveness:
+          include: livenessState,ping
+        readiness:
+          include: readinessState,db,localStorage
 
 streamforge:
   local-pipeline:

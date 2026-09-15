@@ -26,6 +26,7 @@ const steps = [
 
 type TransformationPreset = 'RENAME_SYMBOL' | 'ADD_PIPELINE_LABEL';
 type BlueprintPreset = 'CANONICAL_EVENT';
+type OutputType = 'JSONL' | 'PARQUET';
 
 type PipelineDraft = {
   name: string;
@@ -36,7 +37,10 @@ type PipelineDraft = {
   maximumFrameSize: string;
   transformation: TransformationPreset;
   blueprint: BlueprintPreset;
+  outputType: OutputType;
   outputPath: string;
+  parquetCompression: 'UNCOMPRESSED' | 'SNAPPY' | 'ZSTD';
+  parquetRowGroupSizeBytes: string;
 };
 
 type WizardState = {
@@ -62,7 +66,10 @@ const initialDraft: PipelineDraft = {
   maximumFrameSize: '49',
   transformation: 'RENAME_SYMBOL',
   blueprint: 'CANONICAL_EVENT',
+  outputType: 'JSONL',
   outputPath: 'output/events.jsonl',
+  parquetCompression: 'SNAPPY',
+  parquetRowGroupSizeBytes: '134217728',
 };
 
 const initialState: WizardState = {
@@ -379,26 +386,73 @@ function BlueprintStep() {
 function OutputStep({ draft, errors, onChange }: StepFieldsProps) {
   return (
     <div className="field-grid">
-      <fieldset className="read-only-field">
+      <fieldset>
         <legend>Output type</legend>
         <label>
           <input
             aria-label="JSON Lines output"
-            checked
+            checked={draft.outputType === 'JSONL'}
             name="output-type"
-            readOnly
+            onChange={() => onChange('outputType', 'JSONL')}
             type="radio"
           />{' '}
           JSON Lines
         </label>
+        <label>
+          <input
+            aria-label="Parquet output"
+            checked={draft.outputType === 'PARQUET'}
+            name="output-type"
+            onChange={() => onChange('outputType', 'PARQUET')}
+            type="radio"
+          />{' '}
+          Parquet
+        </label>
       </fieldset>
       <TextField
-        label="JSONL output path"
+        label={
+          draft.outputType === 'PARQUET'
+            ? 'Parquet output path'
+            : 'JSONL output path'
+        }
         name="output-path"
         value={draft.outputPath}
         onChange={(value) => onChange('outputPath', value)}
         error={errorFor(errors, 'output.path')}
       />
+      {draft.outputType === 'PARQUET' ? (
+        <>
+          <label htmlFor="parquet-compression">
+            Compression
+            <select
+              id="parquet-compression"
+              onChange={(event) =>
+                onChange('parquetCompression', event.target.value)
+              }
+              value={draft.parquetCompression}
+            >
+              <option value="SNAPPY">Snappy</option>
+              <option value="ZSTD">Zstandard</option>
+              <option value="UNCOMPRESSED">Uncompressed</option>
+            </select>
+          </label>
+          <TextField
+            label="Parquet row group size in bytes"
+            name="parquet-row-group-size"
+            inputMode="numeric"
+            value={draft.parquetRowGroupSizeBytes}
+            onChange={(value) => onChange('parquetRowGroupSizeBytes', value)}
+            error={errorFor(errors, 'output.parquet.rowGroupSizeBytes')}
+          />
+          <div className="read-only-field">
+            <strong>Explicit columns</strong>
+            <p className="form-hint">
+              event_id (STRING), event_type (STRING), source (STRING), and
+              sequence_number (INT64). Schema inference is disabled.
+            </p>
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }
@@ -604,7 +658,21 @@ function toConfiguration(draft: PipelineDraft): PipelineConfiguration {
     input,
     transform,
     blueprint,
-    output: { type: 'JSONL', path: draft.outputPath },
+    output:
+      draft.outputType === 'PARQUET'
+        ? {
+            type: 'PARQUET',
+            path: draft.outputPath,
+            parquet: {
+              compression: draft.parquetCompression,
+              rowGroupSizeBytes: integerOrDefault(
+                draft.parquetRowGroupSizeBytes,
+                134217728,
+              ),
+              columns: parquetColumns(),
+            },
+          }
+        : { type: 'JSONL', path: draft.outputPath },
   };
 }
 
@@ -684,7 +752,10 @@ function parseImportedDraft(value: string): PipelineDraft {
   const output = asRecord(configuration.output);
   const transform = asRecord(configuration.transform);
   const blueprint = asRecord(configuration.blueprint);
-  if (input.type !== 'STP_BINARY' || output.type !== 'JSONL') {
+  if (
+    input.type !== 'STP_BINARY' ||
+    (output.type !== 'JSONL' && output.type !== 'PARQUET')
+  ) {
     throw new Error(
       'The imported input and output types are not supported by this guided flow.',
     );
@@ -706,8 +777,53 @@ function parseImportedDraft(value: string): PipelineDraft {
     maximumFrameSize: String(input.maximumFrameSize ?? 49),
     transformation: renamePreset(transform),
     blueprint: 'CANONICAL_EVENT',
+    outputType: output.type,
     outputPath: requiredString(output.path, 'output.path'),
+    parquetCompression: parquetCompression(output),
+    parquetRowGroupSizeBytes: parquetRowGroupSize(output),
   };
+}
+
+function parquetColumns(): JsonObject[] {
+  return [
+    { name: 'event_id', path: 'eventId', type: 'STRING', required: true },
+    { name: 'event_type', path: 'eventType', type: 'STRING', required: true },
+    { name: 'source', path: 'source', type: 'STRING', required: true },
+    {
+      name: 'sequence_number',
+      path: 'sequenceNumber',
+      type: 'INT64',
+      required: true,
+    },
+  ];
+}
+
+function parquetCompression(
+  output: Record<string, unknown>,
+): PipelineDraft['parquetCompression'] {
+  if (output.type !== 'PARQUET') return 'SNAPPY';
+  const parquet = asRecord(output.parquet);
+  if (
+    parquet.compression !== 'UNCOMPRESSED' &&
+    parquet.compression !== 'SNAPPY' &&
+    parquet.compression !== 'ZSTD'
+  ) {
+    throw new Error('output.parquet.compression is not supported.');
+  }
+  if (
+    exactJsonStringify(parquet.columns) !== exactJsonStringify(parquetColumns())
+  ) {
+    throw new Error(
+      'The imported Parquet columns are not supported by this guided flow.',
+    );
+  }
+  return parquet.compression;
+}
+
+function parquetRowGroupSize(output: Record<string, unknown>): string {
+  if (output.type !== 'PARQUET') return '134217728';
+  const parquet = asRecord(output.parquet);
+  return String(parquet.rowGroupSizeBytes ?? 134217728);
 }
 
 function renamePreset(

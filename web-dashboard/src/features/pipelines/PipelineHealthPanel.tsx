@@ -3,6 +3,7 @@ import {
   exactIntegerBigInt,
   exactIntegerText,
   pipelineOutputDownloadUrl,
+  pipelineRawCaptureDownloadUrl,
   type ExactInteger,
   type PipelineRun,
   type PipelineRunState,
@@ -91,6 +92,15 @@ export function PipelineHealthPanel({
           href={pipelineOutputDownloadUrl(pipelineId, run.runId)}
         >
           Download finite output
+        </a>
+      ) : null}
+      {terminal && snapshot?.rawCaptureAvailable === true ? (
+        <a
+          className="download-link"
+          download={snapshot.rawCaptureFilename ?? 'raw-input.capture'}
+          href={pipelineRawCaptureDownloadUrl(pipelineId, run.runId)}
+        >
+          Download immutable raw capture
         </a>
       ) : null}
     </section>

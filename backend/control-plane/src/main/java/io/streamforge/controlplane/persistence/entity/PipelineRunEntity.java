@@ -48,6 +48,9 @@ public class PipelineRunEntity extends AuditedEntity {
   @Column(name = "dead_letter_artifact_path", length = 1024)
   private String deadLetterArtifactPath;
 
+  @Column(name = "raw_capture_artifact_path", length = 1024)
+  private String rawCaptureArtifactPath;
+
   protected PipelineRunEntity() {}
 
   public PipelineRunEntity(
@@ -98,6 +101,10 @@ public class PipelineRunEntity extends AuditedEntity {
     return deadLetterArtifactPath;
   }
 
+  public String rawCaptureArtifactPath() {
+    return rawCaptureArtifactPath;
+  }
+
   public void transition(PipelineRunState target, String failure) {
     if (!state.canTransitionTo(target))
       throw new IllegalStateException(
@@ -108,22 +115,30 @@ public class PipelineRunEntity extends AuditedEntity {
     if (failure != null && !failure.isBlank()) failureSummary = failure;
   }
 
-  public void complete(String report, String outputArtifactPath, String deadLetterArtifactPath) {
+  public void complete(
+      String report,
+      String outputArtifactPath,
+      String deadLetterArtifactPath,
+      String rawCaptureArtifactPath) {
     finalReport = report;
     this.outputArtifactPath = outputArtifactPath;
     this.deadLetterArtifactPath = deadLetterArtifactPath;
+    this.rawCaptureArtifactPath = rawCaptureArtifactPath;
     transition(PipelineRunState.COMPLETED, null);
   }
 
-  public void stop(String report, String deadLetterArtifactPath) {
+  public void stop(String report, String deadLetterArtifactPath, String rawCaptureArtifactPath) {
     finalReport = report;
     this.deadLetterArtifactPath = deadLetterArtifactPath;
+    this.rawCaptureArtifactPath = rawCaptureArtifactPath;
     transition(PipelineRunState.STOPPED, null);
   }
 
-  public void fail(String report, String summary, String deadLetterArtifactPath) {
+  public void fail(
+      String report, String summary, String deadLetterArtifactPath, String rawCaptureArtifactPath) {
     finalReport = report;
     this.deadLetterArtifactPath = deadLetterArtifactPath;
+    this.rawCaptureArtifactPath = rawCaptureArtifactPath;
     transition(PipelineRunState.FAILED, summary);
   }
 }
