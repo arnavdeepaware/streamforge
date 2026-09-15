@@ -34,6 +34,8 @@ const snapshot = {
   history: [],
   deadLetters: [],
   outputAvailable: false,
+  rawCaptureAvailable: true,
+  rawCaptureFilename: 'raw-input.capture',
 };
 
 afterEach(() => {

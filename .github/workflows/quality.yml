@@ -33,3 +33,11 @@ jobs:
           cache: npm
           cache-dependency-path: web-dashboard/package-lock.json
       - run: make web-check
+
+  v1-acceptance:
+    name: V1 Docker acceptance
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/run-v1-acceptance.sh

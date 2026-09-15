@@ -37,10 +37,21 @@ class PipelineCliTest {
 
     int exitCode =
         PipelineCli.run(
-            new String[] {"--config", config.toString()}, new PrintStream(output), System.err);
+            new String[] {
+              "--config",
+              config.toString(),
+              "--artifact-root",
+              temporaryDirectory.resolve("artifacts").toString()
+            },
+            new PrintStream(output),
+            System.err);
 
     assertThat(exitCode).isZero();
-    assertThat(output.toString()).contains("received=1").contains("emitted=1");
+    assertThat(output.toString())
+        .contains("runId=")
+        .contains("rawCapture=")
+        .contains("received=1")
+        .contains("emitted=1");
     assertThat(Files.readString(destination)).contains("\"symbol\":\"AAPL\"");
   }
 

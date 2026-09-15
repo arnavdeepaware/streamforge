@@ -2,7 +2,6 @@ package io.streamforge.controlplane.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.streamforge.controlplane.api.DeadLetterResponse;
 import io.streamforge.controlplane.api.PipelineMonitoringResponse;
@@ -50,9 +49,7 @@ public class PipelineRunService {
   private final ObjectMapper mapper;
   private final Path artifactRoot;
   private final ConcurrentHashMap<UUID, ActiveRun> active = new ConcurrentHashMap<>();
-  private final Counter started;
-  private final Counter completed;
-  private final Counter failed;
+  private final PipelineMetrics aggregateMetrics;
 
   public PipelineRunService(
       PipelineRunPersistenceService persistence,
@@ -67,9 +64,7 @@ public class PipelineRunService {
     this.monitor = monitor;
     this.mapper = mapper;
     this.artifactRoot = Path.of(artifactRoot).toAbsolutePath().normalize();
-    started = metrics.counter("streamforge.pipeline.runs", "outcome", "started");
-    completed = metrics.counter("streamforge.pipeline.runs", "outcome", "completed");
-    failed = metrics.counter("streamforge.pipeline.runs", "outcome", "failed");
+    aggregateMetrics = new PipelineMetrics(metrics);
   }
 
   /** Starts the latest revision after committing its STARTING lifecycle state. */
@@ -85,10 +80,10 @@ public class PipelineRunService {
       UUID runId = prepared.response().runId();
       activeRun.assign(runId);
       monitor.register(runId, prepared.response().state());
+      aggregateMetrics.started(runId);
       PipelineExecutionHandle handle =
           backend.start(prepared.command(), new Listener(runId, pipelineId, activeRun));
       activeRun.attach(handle);
-      started.increment();
       return prepared.response();
     } catch (RuntimeException exception) {
       try {
@@ -99,6 +94,9 @@ public class PipelineRunService {
       } catch (RuntimeException persistenceFailure) {
         exception.addSuppressed(persistenceFailure);
       } finally {
+        if (prepared != null) {
+          aggregateMetrics.finished(prepared.response().runId(), "failed");
+        }
         active.remove(pipelineId, activeRun);
       }
       throw exception;
@@ -148,6 +146,14 @@ public class PipelineRunService {
     return new FileSystemResource(resolveArtifact(run.outputArtifactPath()));
   }
 
+  public Resource rawCapture(UUID pipelineId, UUID runId) {
+    StoredRun run = persistence.get(pipelineId, runId);
+    if (run.rawCaptureArtifactPath() == null) {
+      throw new IllegalStateException("raw capture is not available for this run");
+    }
+    return new FileSystemResource(resolveArtifact(run.rawCaptureArtifactPath()));
+  }
+
   @EventListener(ApplicationReadyEvent.class)
   public void reconcileInterruptedRuns() {
     persistence
@@ -163,7 +169,8 @@ public class PipelineRunService {
         run.response().state(),
         metrics(run.finalReport()),
         restoredDeadLetters(run.deadLetterArtifactPath()),
-        outputAvailable(run));
+        outputAvailable(run),
+        artifactAvailable(run.rawCaptureArtifactPath()));
   }
 
   private PipelineRunMetrics metrics(JsonNode report) {
@@ -237,6 +244,15 @@ public class PipelineRunService {
     }
   }
 
+  private boolean artifactAvailable(String relativePath) {
+    if (relativePath == null) return false;
+    try {
+      return Files.isRegularFile(resolveArtifact(relativePath));
+    } catch (RuntimeException exception) {
+      return false;
+    }
+  }
+
   private Path resolveArtifact(String relativePath) {
     try {
       Files.createDirectories(artifactRoot);
@@ -292,6 +308,7 @@ public class PipelineRunService {
 
     @Override
     public void onCompleted(PipelineExecutionResult result) {
+      String metricOutcome = "failed";
       try {
         PipelineRunResponse response = persistence.finish(runId, result);
         boolean outputAvailable =
@@ -299,20 +316,27 @@ public class PipelineRunService {
                 && result.report().outcome() == PipelineOutcome.COMPLETED
                 && result.outputArtifactPath().isPresent();
         monitor.state(runId, response.state(), outputAvailable);
-        if (response.state() == PipelineRunState.FAILED) failed.increment();
-        else completed.increment();
+        monitor.artifacts(runId, outputAvailable, result.rawCaptureArtifactPath().isPresent());
+        metricOutcome = outcome(response.state());
       } finally {
+        aggregateMetrics.finished(runId, metricOutcome);
         completeActive();
       }
     }
 
     @Override
     public void onFailed(Throwable failure) {
+      onFailed(failure, Optional.empty());
+    }
+
+    @Override
+    public void onFailed(Throwable failure, Optional<String> rawCaptureArtifactPath) {
       try {
-        PipelineRunResponse response = persistence.fail(runId, failure);
+        PipelineRunResponse response = persistence.fail(runId, failure, rawCaptureArtifactPath);
         monitor.state(runId, response.state(), false);
-        failed.increment();
+        monitor.artifacts(runId, false, rawCaptureArtifactPath.isPresent());
       } finally {
+        aggregateMetrics.finished(runId, "failed");
         completeActive();
       }
     }
@@ -320,6 +344,7 @@ public class PipelineRunService {
     @Override
     public void onMetrics(PipelineRunMetrics metrics) {
       monitor.metrics(runId, metrics);
+      aggregateMetrics.sample(runId, metrics);
     }
 
     @Override
@@ -331,6 +356,14 @@ public class PipelineRunService {
       activeRun.complete();
       active.remove(pipelineId, activeRun);
     }
+  }
+
+  private static String outcome(PipelineRunState state) {
+    return switch (state) {
+      case COMPLETED -> "completed";
+      case STOPPED -> "stopped";
+      default -> "failed";
+    };
   }
 
   private static final class ActiveRun {

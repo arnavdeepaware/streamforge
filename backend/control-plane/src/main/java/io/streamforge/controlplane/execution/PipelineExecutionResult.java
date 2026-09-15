@@ -7,9 +7,13 @@ import java.util.Optional;
 public record PipelineExecutionResult(
     PipelineReport report,
     Optional<String> outputArtifactPath,
-    Optional<String> deadLetterArtifactPath) {
+    Optional<String> deadLetterArtifactPath,
+    Optional<String> rawCaptureArtifactPath) {
   public PipelineExecutionResult {
-    if (report == null || outputArtifactPath == null || deadLetterArtifactPath == null) {
+    if (report == null
+        || outputArtifactPath == null
+        || deadLetterArtifactPath == null
+        || rawCaptureArtifactPath == null) {
       throw new IllegalArgumentException("execution result fields must not be null");
     }
   }

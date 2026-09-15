@@ -21,7 +21,7 @@ From the repository root:
 ```
 
 The script creates isolated temporary input, workspace, and artifact roots. It waits for
-PostgreSQL, the control-plane health endpoint, and the dashboard before creating a pipeline. The
+PostgreSQL, the control-plane readiness endpoint, and the dashboard before creating a pipeline. The
 pipeline reads `ticks.stp` relative to the managed input root and writes its output and dead-letter
 data beneath a server-owned run directory in the managed artifact root.
 
@@ -32,7 +32,8 @@ these assertions hold:
 - lifecycle state is `COMPLETED`;
 - emitted count is `10,000` and failed count is `1`;
 - exactly one recent dead-letter summary is available;
-- output is downloadable and contains exactly `10,000` JSONL lines.
+- output is downloadable and contains exactly `10,000` JSONL lines;
+- the immutable raw capture is downloadable and exactly matches the generated input bytes.
 
 On success, the script leaves the services running and prints the pipeline page, run ID, download
 endpoint, artifact root, service logs, and an exact shutdown command. On setup or verification
@@ -44,7 +45,7 @@ printed temporary directory.
 The pipeline detail page restores the latest run, including terminal runs after a control-plane
 restart. It displays lifecycle state, exact counters, event rate, integer nanosecond latency,
 direct-backpressure queue depth (`0`), sequence anomalies, and recent safe dead-letter summaries.
-The output link appears only when the run completed and the managed artifact still exists.
+Output and raw-capture links appear only when their managed artifacts still exist.
 
 SSE delivery is decoupled from pipeline processing and reconnects with capped exponential backoff.
 The server retains all active observations plus at most 100 terminal observations for 24 hours.
@@ -59,5 +60,6 @@ only read files beneath `STREAMFORGE_LOCAL_PIPELINE_INPUT_ROOT`. Outputs and qua
 server-owned beneath `STREAMFORGE_LOCAL_PIPELINE_ARTIFACT_ROOT`; host-absolute paths are neither
 persisted nor returned. CLI-only pipeline execution still accepts explicit local paths.
 
-Redis, Kafka, authentication, remote workers, and distributed artifact storage are outside this
-MVP.
+This script remains a host-development diagnostic. The supported user startup is
+`docker compose up --build` from the repository root. Redis, Kafka, authentication, remote workers,
+and distributed artifact storage are outside v1.

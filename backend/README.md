@@ -1,48 +1,10 @@
-# Backend Build
+# StreamForge Backend 1.0
 
-The backend is a Java 21 Maven multi-module build. It includes immutable market-data value types, STP v1 framing and codecs, a deterministic tick simulator with a local TCP generator-to-parser path, and a local in-process pipeline runner in `pipeline-runtime`. The runner streams STP binary, JSONL, and CSV files through transformation and optional output blueprints into JSONL or CSV files. It does not provide control-plane services.
+The Java 21 Maven reactor contains the exact canonical model, STP protocol/simulator,
+STP/CSV/JSONL parsers, declarative transformation engine, local pipeline runtime, and PostgreSQL
+control plane. `stream-worker` is excluded as post-v1.
 
-## Local Pipeline Runner
-
-`io.streamforge.pipelineruntime.PipelineCli` loads one strict saved JSON configuration with
-`--config <path>`. It processes each input incrementally with direct backpressure, reports final
-received, parsed, normalized, filtered, emitted, and failed counters, and retains bounded,
-source-located failures. Cancellation or output failure aborts staged file output rather than
-publishing a partial destination.
-
-Optional local dead-letter handling is configured with a root `deadLetter` object. `QUARANTINE`
-writes staged JSONL records containing a deterministic failure ID, pipeline and schema versions,
-stage, source location, safe error message, retryability, and an optional bounded payload fragment.
-`SKIP` continues without durable storage; `FAIL_FAST` stops at the first record-level failure.
-For example:
-
-```json
-{
-  "pipelineId": "sample-normalization",
-  "pipelineVersion": "1",
-  "deadLetter": {
-    "policy": "QUARANTINE",
-    "path": "dead-letter.jsonl",
-    "includePayload": true,
-    "maximumPayloadBytes": 4096
-  }
-}
-```
-
-Payload capture is opt-in, byte-bounded, and redacts common `password`, `token`, `secret`, and API
-key assignments. Quarantined parse, normalization, transformation, and blueprint failures do not
-stop independent later records. A primary output failure is marked retryable and remains terminal.
-
-[`../schemas/examples/pipeline-aapl-jsonl-v1.json`](../schemas/examples/pipeline-aapl-jsonl-v1.json)
-is a checked-in JSONL-to-JSONL sample that applies the AAPL output blueprint. Its expected output
-is [`../schemas/examples/pipeline-aapl-jsonl-golden-output.jsonl`](../schemas/examples/pipeline-aapl-jsonl-golden-output.jsonl).
-
-## Requirements
-
-- A JDK from 21 through 26. The build compiles with Java 21 release compatibility.
-- Internet access the first time Maven Wrapper downloads Maven and dependency artifacts.
-
-## Commands
+## Verify
 
 From the repository root:
 
@@ -50,57 +12,61 @@ From the repository root:
 ./backend/mvnw -f backend/pom.xml verify
 ```
 
-From the `backend/` directory:
+With Docker available this includes PostgreSQL/Testcontainers integration tests. The benchmark
+smoke command is:
 
 ```sh
-./mvnw verify
+./scripts/run-stp-benchmarks.sh
 ```
 
-The reactor includes `common-model`, `stp-protocol`, `tick-simulator`, `parser-engine`, `transform-engine`, `pipeline-runtime`, `control-plane`, and `stream-worker`.
+## Local pipeline CLI
 
-## Control Plane
-
-The control plane is a Spring Boot and PostgreSQL persistence service. It stores validated,
-credential-free pipeline definition components and revisions, but does not execute pipelines or
-provide authentication. Local PostgreSQL startup and service commands are documented in
-[`control-plane/README.md`](control-plane/README.md).
-
-## Tick Simulator
-
-Build the simulator and its reactor dependencies, then write a finite binary STP fixture:
+The CLI always generates a UUID run ID and captures the source before parsing. Artifacts default
+to `.streamforge/artifacts/<run-id>`:
 
 ```sh
-./backend/mvnw -f backend/pom.xml -pl tick-simulator -am package
-java -cp backend/tick-simulator/target/classes:backend/stp-protocol/target/classes:backend/common-model/target/classes \
-  io.streamforge.ticksimulator.TickSimulatorCli \
-  --seed 5 --symbols AAPL,MSFT --count 100 --output ticks.stp
+java -cp backend/pipeline-runtime/target/classes io.streamforge.pipelineruntime.PipelineCli \
+  --config /path/to/pipeline.json \
+  --artifact-root /path/to/artifacts
 ```
 
-Use `--output -` to write binary frames to standard output. Run the final command with `--help` for event-distribution, timestamp, and continuous-mode options. The classpath separator above is for POSIX shells.
+Its report prints the run ID, capture location, exact counters, and terminal status. Configuration
+supports STP binary, JSONL, and CSV input; JSONL, CSV, and explicit-schema Parquet output; optional
+safe transformation/blueprint documents; and `SKIP`, `QUARANTINE`, or `FAIL_FAST` dead-letter
+behavior.
 
-## Local TCP Demo
+Parquet column types are `STRING`, `BOOLEAN`, `INT64`, `TIMESTAMP_NANOS`, and `FIXED_DECIMAL`.
+Compression is `UNCOMPRESSED`, `SNAPPY` (default), or `ZSTD`. Fixed decimals require scale 0–18;
+other types reject scale. Required fields, scalar type compatibility, exact decimal rescaling, and
+overflow are enforced.
 
-Build the two modules:
+The public output section is explicit and does not infer a schema:
 
-```sh
-./backend/mvnw -f backend/pom.xml -pl tick-simulator,parser-engine -am package
+```json
+{
+  "type": "PARQUET",
+  "path": "normalized.parquet",
+  "parquet": {
+    "compression": "SNAPPY",
+    "rowGroupSizeBytes": 134217728,
+    "columns": [
+      {
+        "name": "exchange_timestamp",
+        "path": "metadata.exchangeTimestamp",
+        "type": "TIMESTAMP_NANOS",
+        "required": true
+      },
+      {
+        "name": "price",
+        "path": "payload.price",
+        "type": "FIXED_DECIMAL",
+        "scale": 4,
+        "required": false
+      }
+    ]
+  }
+}
 ```
 
-In terminal 1, start a server that exits after serving its first finite client:
-
-```sh
-java -cp backend/tick-simulator/target/classes:backend/stp-protocol/target/classes:backend/common-model/target/classes \
-  io.streamforge.ticksimulator.TickTcpServerCli \
-  --host 127.0.0.1 --port 9010 --seed 5 --symbols AAPL,MSFT --count 10 --rate 0
-```
-
-In terminal 2, connect and print parsed events:
-
-```sh
-java -cp backend/parser-engine/target/classes:backend/stp-protocol/target/classes:backend/common-model/target/classes \
-  io.streamforge.parserengine.StpParserCli \
-  --host 127.0.0.1 --port 9010 \
-  --report-sequence-integrity --source demo-session
-```
-
-Sequence integrity reporting is optional; it prints structured expected, gap, duplicate, and late/out-of-order events for the named logical source/session. The TCP server writes directly to each client socket. TCP flow control blocks generation for a slow client instead of accumulating an unbounded application queue. The classpath separators above are for POSIX shells.
+The supported end-user startup remains `docker compose up --build`; see the
+[control-plane README](control-plane/README.md) only for host-development alternatives.

@@ -1,6 +1,7 @@
 package io.streamforge.pipelineruntime;
 
 import io.streamforge.common.model.CanonicalEvent;
+import io.streamforge.common.model.EventMetadata;
 import io.streamforge.common.model.InstrumentReference;
 import io.streamforge.common.model.OrderId;
 import io.streamforge.common.model.RawEventReference;
@@ -31,6 +32,7 @@ import io.streamforge.pipelineruntime.output.JsonLinesOutputSink;
 import io.streamforge.pipelineruntime.output.OutputRecord;
 import io.streamforge.pipelineruntime.output.OutputSink;
 import io.streamforge.pipelineruntime.output.OutputSinkException;
+import io.streamforge.pipelineruntime.output.ParquetOutputSink;
 import io.streamforge.stp.protocol.AddOrderMessage;
 import io.streamforge.stp.protocol.CancelOrderMessage;
 import io.streamforge.stp.protocol.ExecuteOrderMessage;
@@ -123,6 +125,14 @@ public final class LocalPipelineRunner {
       throw new IllegalArgumentException(
           "pipeline configuration and cancellation must not be null");
     }
+    return runInternal(config, cancellation, Optional.empty());
+  }
+
+  private PipelineReport runInternal(
+      PipelineRunConfig config,
+      PipelineCancellation cancellation,
+      Optional<java.util.UUID> captureRunId)
+      throws PipelineConfigurationException {
     PreparedPipeline prepared = prepare(config);
     try (DeadLetterSession deadLetters = DeadLetterSession.open(config.deadLetterConfig());
         OutputSink sink = outputSink(config.output())) {
@@ -134,7 +144,8 @@ public final class LocalPipelineRunner {
               config.deadLetterConfig(),
               deadLetters,
               clock,
-              observer);
+              observer,
+              captureRunId);
       try {
         sink.start();
       } catch (OutputSinkException exception) {
@@ -174,6 +185,36 @@ public final class LocalPipelineRunner {
     } catch (OutputSinkException exception) {
       throw new PipelineConfigurationException("$.deadLetter.path", detail(exception), exception);
     }
+  }
+
+  /** Captures the source immutably, then runs against the captured bytes. */
+  public PipelineReport run(
+      PipelineRunConfig config, PipelineCancellation cancellation, PipelineRunArtifacts artifacts)
+      throws PipelineConfigurationException {
+    if (config == null || cancellation == null || artifacts == null) {
+      throw new IllegalArgumentException("configuration, cancellation, and artifacts are required");
+    }
+    try {
+      PipelineInput captured = RawCapture.capture(config.input(), artifacts, clock);
+      PipelineRunConfig capturedConfig =
+          new PipelineRunConfig(
+              captured,
+              config.transformationConfig(),
+              config.blueprintConfig(),
+              config.output(),
+              config.identity(),
+              config.deadLetterConfig());
+      return runCaptured(capturedConfig, cancellation, artifacts.runId());
+    } catch (IOException exception) {
+      throw new PipelineConfigurationException(
+          "$.input.path", "could not capture input: " + detail(exception), exception);
+    }
+  }
+
+  private PipelineReport runCaptured(
+      PipelineRunConfig config, PipelineCancellation cancellation, java.util.UUID runId)
+      throws PipelineConfigurationException {
+    return runInternal(config, cancellation, Optional.of(runId));
   }
 
   private PreparedPipeline prepare(PipelineRunConfig config) throws PipelineConfigurationException {
@@ -223,6 +264,8 @@ public final class LocalPipelineRunner {
     return switch (output) {
       case PipelineOutput.JsonLines jsonLines -> new JsonLinesOutputSink(jsonLines.path());
       case PipelineOutput.Csv csv -> new CsvOutputSink(csv.path(), csv.config());
+      case PipelineOutput.Parquet parquet ->
+          new ParquetOutputSink(parquet.path(), parquet.config());
     };
   }
 
@@ -262,7 +305,7 @@ public final class LocalPipelineRunner {
                     state.parsed++;
                     state.normalized++;
                     processCanonical(
-                        canonical.event(),
+                        state.withCaptureReference(canonical.event(), "line", event.lineNumber()),
                         location,
                         Optional.of(canonical.sourceText()),
                         prepared,
@@ -310,7 +353,7 @@ public final class LocalPipelineRunner {
                     state.parsed++;
                     state.normalized++;
                     processCanonical(
-                        canonical.event(),
+                        state.withCaptureReference(canonical.event(), "row", event.rowNumber()),
                         location,
                         Optional.of(canonical.sourceText()),
                         prepared,
@@ -418,8 +461,7 @@ public final class LocalPipelineRunner {
                     input.source(),
                     input.venue(),
                     Optional.empty(),
-                    new RawEventReference(
-                        "stp:" + input.source().value() + ":frame:" + frameNumber),
+                    state.captureReference("frame", frameNumber, input.source().value()),
                     orderId ->
                         Optional.ofNullable(orders.get(orderId)).map(StpOrderState::instrument)));
         switch (normalized) {
@@ -601,6 +643,7 @@ public final class LocalPipelineRunner {
     private final DeadLetterSession deadLetters;
     private final Clock clock;
     private final PipelineRunObserver observer;
+    private final Optional<java.util.UUID> captureRunId;
     private final SequenceIntegrityTracker integrityTracker = new SequenceIntegrityTracker();
     private final List<PipelineFailure> failures = new ArrayList<>();
 
@@ -610,13 +653,39 @@ public final class LocalPipelineRunner {
         Optional<DeadLetterConfig> deadLetterConfig,
         DeadLetterSession deadLetters,
         Clock clock,
-        PipelineRunObserver observer) {
+        PipelineRunObserver observer,
+        Optional<java.util.UUID> captureRunId) {
       this.maximumFailures = maximumFailures;
       this.identity = identity;
       this.deadLetterConfig = deadLetterConfig;
       this.deadLetters = deadLetters;
       this.clock = clock;
       this.observer = observer;
+      this.captureRunId = captureRunId;
+    }
+
+    private RawEventReference captureReference(String kind, long ordinal, String fallbackSource) {
+      return captureRunId
+          .map(id -> new RawEventReference("capture:" + id + ":" + kind + ":" + ordinal))
+          .orElseGet(() -> new RawEventReference(kind + ":" + fallbackSource + ":" + ordinal));
+    }
+
+    private CanonicalEvent withCaptureReference(CanonicalEvent event, String kind, long ordinal) {
+      if (captureRunId.isEmpty()) {
+        return event;
+      }
+      EventMetadata metadata = event.metadata();
+      EventMetadata rebound =
+          new EventMetadata(
+              metadata.eventId(),
+              metadata.schemaVersion(),
+              metadata.source(),
+              metadata.venue(),
+              metadata.exchangeTimestamp(),
+              metadata.receiveTimestamp(),
+              metadata.sequenceNumber(),
+              captureReference(kind, ordinal, metadata.source().value()));
+      return new CanonicalEvent(rebound, event.instrument(), event.payload());
     }
 
     private boolean record(

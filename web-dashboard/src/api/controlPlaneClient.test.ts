@@ -95,6 +95,8 @@ describe('control-plane exact JSON transport', () => {
           history,
           deadLetters: [],
           outputAvailable: true,
+          rawCaptureAvailable: true,
+          rawCaptureFilename: 'raw-input.capture',
         }),
       ),
     );

@@ -120,21 +120,36 @@ public class PipelineRunPersistenceService {
       if (run.state() != PipelineRunState.STOPPING) {
         run.transition(PipelineRunState.STOPPING, null);
       }
-      run.stop(report, deadLetter);
+      run.stop(report, deadLetter, result.rawCaptureArtifactPath().orElse(null));
     } else if (result.report().outcome() == PipelineOutcome.FAILED) {
-      run.fail(report, failureSummary(result), deadLetter);
+      run.fail(
+          report, failureSummary(result), deadLetter, result.rawCaptureArtifactPath().orElse(null));
     } else {
-      run.complete(report, result.outputArtifactPath().orElse(null), deadLetter);
+      run.complete(
+          report,
+          result.outputArtifactPath().orElse(null),
+          deadLetter,
+          result.rawCaptureArtifactPath().orElse(null));
     }
     return response(runs.save(run));
   }
 
   @Transactional
   public PipelineRunResponse fail(UUID runId, Throwable failure) {
+    return fail(runId, failure, Optional.empty());
+  }
+
+  @Transactional
+  public PipelineRunResponse fail(
+      UUID runId, Throwable failure, Optional<String> rawCaptureArtifactPath) {
     PipelineRunEntity run = required(runId);
     if (run.state().active()) {
       String summary = safe(failure);
-      run.fail(json(failedReport(summary)), summary, run.deadLetterArtifactPath());
+      run.fail(
+          json(failedReport(summary)),
+          summary,
+          run.deadLetterArtifactPath(),
+          rawCaptureArtifactPath.orElse(run.rawCaptureArtifactPath()));
     }
     return response(runs.save(run));
   }
@@ -157,7 +172,11 @@ public class PipelineRunPersistenceService {
                   run.finalReport() == null
                       ? json(failedReport(RESTART_FAILURE))
                       : run.finalReport();
-              run.fail(report, RESTART_FAILURE, run.deadLetterArtifactPath());
+              run.fail(
+                  report,
+                  RESTART_FAILURE,
+                  run.deadLetterArtifactPath(),
+                  run.rawCaptureArtifactPath());
               return response(runs.save(run));
             })
         .toList();
@@ -232,7 +251,8 @@ public class PipelineRunPersistenceService {
         response(run),
         run.finalReport() == null ? null : tree(run.finalReport()),
         run.outputArtifactPath(),
-        run.deadLetterArtifactPath());
+        run.deadLetterArtifactPath(),
+        run.rawCaptureArtifactPath());
   }
 
   private static PipelineRunResponse response(PipelineRunEntity run) {
@@ -289,5 +309,6 @@ public class PipelineRunPersistenceService {
       PipelineRunResponse response,
       JsonNode finalReport,
       String outputArtifactPath,
-      String deadLetterArtifactPath) {}
+      String deadLetterArtifactPath,
+      String rawCaptureArtifactPath) {}
 }

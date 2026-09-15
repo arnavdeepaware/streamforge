@@ -1,0 +1,6 @@
+.git
+.streamforge
+**/target
+web-dashboard/node_modules
+web-dashboard/dist
+infrastructure/compose/.env

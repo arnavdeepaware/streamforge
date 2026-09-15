@@ -5,7 +5,6 @@ import { PipelineListPage } from './features/pipelines/PipelineListPage';
 import { PipelineCreationPage } from './features/pipeline-creation/PipelineCreationPage';
 import { FieldMapperPage } from './features/pipeline-mapper/FieldMapperPage';
 import { SchemaRegistryPage } from './features/schemas/SchemaRegistryPage';
-import { PlaceholderPage } from './routes/PlaceholderPage';
 import { RouteErrorPage } from './routes/RouteErrorPage';
 
 const routes: RouteObject[] = [
@@ -26,14 +25,6 @@ const routes: RouteObject[] = [
       {
         path: 'schema-registry',
         element: <SchemaRegistryPage />,
-      },
-      {
-        path: 'stream-inspector',
-        element: <PlaceholderPage title="Stream Inspector" />,
-      },
-      {
-        path: 'dead-letter-events',
-        element: <PlaceholderPage title="Dead-Letter Events" />,
       },
       { path: '*', element: <RouteErrorPage /> },
     ],

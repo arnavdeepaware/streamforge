@@ -29,8 +29,9 @@ export function SchemaRegistryPage() {
   if (schemas.data.items.length === 0) {
     return (
       <section className="page-content" aria-labelledby="page-title">
-        <PageHeader eyebrow="Control plane" title="Schema Registry">
-          Versioned JSON Schema definitions from the control plane.
+        <PageHeader eyebrow="Read-only in v1" title="Schema Registry">
+          Versioned JSON Schema definitions from the control plane. Editing is
+          deferred until after v1.
         </PageHeader>
         <EmptyState title="No schemas yet">
           Schema editing is not implemented in the dashboard yet.
@@ -41,8 +42,9 @@ export function SchemaRegistryPage() {
 
   return (
     <section className="page-content" aria-labelledby="page-title">
-      <PageHeader eyebrow="Control plane" title="Schema Registry">
-        Versioned JSON Schema definitions from the control plane.
+      <PageHeader eyebrow="Read-only in v1" title="Schema Registry">
+        Versioned JSON Schema definitions from the control plane. Editing is
+        deferred until after v1.
       </PageHeader>
       <p aria-live="polite" className="result-summary">
         {exactIntegerText(schemas.data.totalItems)} schema

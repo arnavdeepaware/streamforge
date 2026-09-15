@@ -1,10 +1,12 @@
 package io.streamforge.pipelineruntime;
 
 import io.streamforge.pipelineruntime.output.CsvOutputConfig;
+import io.streamforge.pipelineruntime.output.ParquetOutputConfig;
 import java.nio.file.Path;
 
 /** Finite local file output selected by a saved pipeline configuration. */
-public sealed interface PipelineOutput permits PipelineOutput.JsonLines, PipelineOutput.Csv {
+public sealed interface PipelineOutput
+    permits PipelineOutput.JsonLines, PipelineOutput.Csv, PipelineOutput.Parquet {
   Path path();
 
   /** JSON Lines file output. */
@@ -21,6 +23,15 @@ public sealed interface PipelineOutput permits PipelineOutput.JsonLines, Pipelin
     public Csv {
       if (path == null || config == null) {
         throw new IllegalArgumentException("CSV output path and config must not be null");
+      }
+    }
+  }
+
+  /** Parquet file output with an explicit, typed schema. */
+  record Parquet(Path path, ParquetOutputConfig config) implements PipelineOutput {
+    public Parquet {
+      if (path == null || config == null) {
+        throw new IllegalArgumentException("Parquet output path and config must not be null");
       }
     }
   }

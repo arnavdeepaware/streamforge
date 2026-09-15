@@ -153,6 +153,8 @@ export type PipelineMonitoring = {
   history: MetricSample[];
   deadLetters: DeadLetter[];
   outputAvailable: boolean;
+  rawCaptureAvailable: boolean;
+  rawCaptureFilename: string | null;
 };
 
 export class ControlPlaneApiError extends Error {
@@ -228,6 +230,13 @@ export function pipelineOutputDownloadUrl(
   runId: string,
 ): string {
   return `${apiBaseUrl}/pipelines/${encodeURIComponent(pipelineId)}/runs/${encodeURIComponent(runId)}/output`;
+}
+
+export function pipelineRawCaptureDownloadUrl(
+  pipelineId: string,
+  runId: string,
+): string {
+  return `${apiBaseUrl}/pipelines/${encodeURIComponent(pipelineId)}/runs/${encodeURIComponent(runId)}/raw-capture`;
 }
 
 async function get<T>(path: string, parser: (value: unknown) => T): Promise<T> {
@@ -360,6 +369,8 @@ export function parsePipelineMonitoring(value: unknown): PipelineMonitoring {
     history: array(object.history).map(parseMetricSample).slice(-120),
     deadLetters: array(object.deadLetters).map(parseDeadLetter),
     outputAvailable: boolean(object.outputAvailable),
+    rawCaptureAvailable: boolean(object.rawCaptureAvailable),
+    rawCaptureFilename: nullableString(object.rawCaptureFilename),
   };
 }
 

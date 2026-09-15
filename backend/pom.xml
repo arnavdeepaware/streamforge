@@ -6,7 +6,7 @@
 
     <groupId>io.streamforge</groupId>
     <artifactId>streamforge-backend</artifactId>
-    <version>0.1.0</version>
+    <version>1.0.0</version>
     <packaging>pom</packaging>
 
     <name>StreamForge Backend</name>
@@ -20,7 +20,6 @@
         <module>transform-engine</module>
         <module>pipeline-runtime</module>
         <module>control-plane</module>
-        <module>stream-worker</module>
     </modules>
 
     <properties>
@@ -40,6 +39,8 @@
         <spring.boot.version>3.5.4</spring.boot.version>
         <testcontainers.version>1.21.3</testcontainers.version>
         <springdoc.version>2.8.9</springdoc.version>
+        <parquet.version>1.15.2</parquet.version>
+        <hadoop.version>3.4.1</hadoop.version>
     </properties>
 
     <dependencyManagement>
@@ -82,6 +83,21 @@
                 <version>${testcontainers.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.parquet</groupId>
+                <artifactId>parquet-hadoop</artifactId>
+                <version>${parquet.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.hadoop</groupId>
+                <artifactId>hadoop-common</artifactId>
+                <version>${hadoop.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.hadoop</groupId>
+                <artifactId>hadoop-mapreduce-client-core</artifactId>
+                <version>${hadoop.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.springdoc</groupId>

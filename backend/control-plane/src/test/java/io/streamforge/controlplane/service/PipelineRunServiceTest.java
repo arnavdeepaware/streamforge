@@ -64,7 +64,8 @@ class PipelineRunServiceTest {
         (command, listener) -> {
           listener.onRunning();
           listener.onCompleted(
-              new PipelineExecutionResult(completedReport(), Optional.empty(), Optional.empty()));
+              new PipelineExecutionResult(
+                  completedReport(), Optional.empty(), Optional.empty(), Optional.empty()));
           return () -> {};
         };
     PipelineRunService service = service(persistence, synchronous);

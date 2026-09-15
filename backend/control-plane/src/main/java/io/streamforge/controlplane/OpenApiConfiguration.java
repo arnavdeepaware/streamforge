@@ -10,7 +10,7 @@ import org.springframework.context.annotation.Configuration;
     info =
         @Info(
             title = "StreamForge Control Plane API",
-            version = "v1",
+            version = "1.0.0",
             description =
                 "Versioned definition, local-run lifecycle, monitoring, and validation APIs."))
 public class OpenApiConfiguration {}

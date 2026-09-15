@@ -166,17 +166,39 @@ public final class PipelineController {
   }
 
   @GetMapping("/{id}/runs/{runId}/output")
-  @Operation(summary = "Download completed finite JSONL or CSV output")
+  @Operation(summary = "Download completed finite JSONL, CSV, or Parquet output")
   public ResponseEntity<Resource> output(
       @PathVariable("id") UUID id, @PathVariable("runId") UUID runId) {
     Resource output = runs.output(id, runId);
     String filename = output.getFilename() == null ? "pipeline-output" : output.getFilename();
     return ResponseEntity.ok()
-        .contentType(MediaType.APPLICATION_OCTET_STREAM)
+        .contentType(mediaType(filename))
         .header(
             HttpHeaders.CONTENT_DISPOSITION,
             ContentDisposition.attachment().filename(filename).build().toString())
         .body(output);
+  }
+
+  @GetMapping("/{id}/runs/{runId}/raw-capture")
+  @Operation(summary = "Download the immutable raw input captured for one run")
+  public ResponseEntity<Resource> rawCapture(
+      @PathVariable("id") UUID id, @PathVariable("runId") UUID runId) {
+    Resource capture = runs.rawCapture(id, runId);
+    return ResponseEntity.ok()
+        .contentType(MediaType.APPLICATION_OCTET_STREAM)
+        .header(
+            HttpHeaders.CONTENT_DISPOSITION,
+            ContentDisposition.attachment().filename("raw-input.capture").build().toString())
+        .body(capture);
+  }
+
+  private static MediaType mediaType(String filename) {
+    if (filename.endsWith(".jsonl")) return MediaType.APPLICATION_NDJSON;
+    if (filename.endsWith(".csv")) return MediaType.parseMediaType("text/csv");
+    if (filename.endsWith(".parquet")) {
+      return MediaType.parseMediaType("application/vnd.apache.parquet");
+    }
+    return MediaType.APPLICATION_OCTET_STREAM;
   }
 
   @GetMapping(path = "/{id}/runs/{runId}/events", produces = "text/event-stream")
