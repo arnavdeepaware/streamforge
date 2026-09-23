@@ -1,3 +1,4 @@
+import { ArrowRight, Plus } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { exactIntegerText } from '../../api/controlPlaneClient';
 import { usePipelines } from '../../api/queries';
@@ -8,19 +9,14 @@ import {
 } from '../../components/AsyncState';
 import { PageHeader } from '../../components/PageHeader';
 import { Pagination } from '../../components/Pagination';
+import { ResourceStatusBadge } from '../../components/StatusBadge';
 
-type PipelineListPageProps = {
-  compact?: boolean;
-};
-
-export function PipelineListPage({ compact = false }: PipelineListPageProps) {
+export function PipelineListPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const page = compact ? 0 : pageFrom(searchParams.get('page'));
+  const page = pageFrom(searchParams.get('page'));
   const pipelines = usePipelines(page);
-  const title = compact ? 'Dashboard' : 'Pipelines';
 
-  if (pipelines.isPending)
-    return <LoadingState title={`${title} is loading`} />;
+  if (pipelines.isPending) return <LoadingState title="Pipelines is loading" />;
   if (pipelines.isError) {
     return (
       <ErrorState
@@ -35,12 +31,27 @@ export function PipelineListPage({ compact = false }: PipelineListPageProps) {
   if (pipelines.data.items.length === 0) {
     return (
       <section className="page-content" aria-labelledby="page-title">
-        <PageHeader eyebrow="Control plane" title={title}>
+        <PageHeader
+          about={{
+            purpose:
+              'Pipeline definitions describe the complete local normalization workflow and point to immutable revisions.',
+            outcome:
+              'Open a pipeline to run its latest revision and inspect its health and artifacts.',
+          }}
+          actions={
+            <Link className="button button--primary" to="/pipelines/new">
+              <Plus aria-hidden="true" size={18} />
+              New pipeline
+            </Link>
+          }
+          eyebrow="Control plane"
+          title="Pipelines"
+        >
           Pipeline definitions saved in the control plane appear here.
         </PageHeader>
         <EmptyState title="No pipelines yet">
-          Create pipeline definitions through the control-plane API. The
-          graphical editor is not implemented yet.
+          Create a pipeline with the guided editor to start processing local
+          market data.
         </EmptyState>
       </section>
     );
@@ -48,10 +59,24 @@ export function PipelineListPage({ compact = false }: PipelineListPageProps) {
 
   return (
     <section className="page-content" aria-labelledby="page-title">
-      <PageHeader eyebrow="Control plane" title={title}>
-        {compact
-          ? 'A live view of pipeline definitions available through the control plane.'
-          : 'Pipeline definitions, revision state, and archival status from the control plane.'}
+      <PageHeader
+        about={{
+          purpose:
+            'Pipeline definitions describe input, transformations, output structure, and storage settings.',
+          outcome:
+            'Open any pipeline to run its latest immutable revision or inspect the most recent run.',
+        }}
+        actions={
+          <Link className="button button--primary" to="/pipelines/new">
+            <Plus aria-hidden="true" size={18} />
+            New pipeline
+          </Link>
+        }
+        eyebrow="Control plane"
+        title="Pipelines"
+      >
+        Pipeline definitions, revision state, and archival status from the
+        control plane.
       </PageHeader>
       <p aria-live="polite" className="result-summary">
         {exactIntegerText(pipelines.data.totalItems)} pipeline
@@ -65,7 +90,7 @@ export function PipelineListPage({ compact = false }: PipelineListPageProps) {
               <h3>
                 <Link to={`/pipelines/${pipeline.id}`}>{pipeline.name}</Link>
               </h3>
-              <StatusBadge archived={pipeline.archived} />
+              <ResourceStatusBadge archived={pipeline.archived} />
             </div>
             <p>{pipeline.description || 'No description provided.'}</p>
             <dl className="metadata-list">
@@ -78,20 +103,23 @@ export function PipelineListPage({ compact = false }: PipelineListPageProps) {
                 <dd>{formatDate(pipeline.updatedAt)}</dd>
               </div>
             </dl>
+            <Link
+              aria-label={`Open ${pipeline.name}`}
+              className="card-link"
+              to={`/pipelines/${pipeline.id}`}
+            >
+              Open pipeline <ArrowRight aria-hidden="true" size={15} />
+            </Link>
           </article>
         ))}
       </div>
-      {!compact ? (
-        <Pagination
-          onPageChange={(nextPage) =>
-            setSearchParams(
-              nextPage === 0 ? {} : { page: String(nextPage + 1) },
-            )
-          }
-          page={page}
-          totalPages={pipelines.data.totalPages}
-        />
-      ) : null}
+      <Pagination
+        onPageChange={(nextPage) =>
+          setSearchParams(nextPage === 0 ? {} : { page: String(nextPage + 1) })
+        }
+        page={page}
+        totalPages={pipelines.data.totalPages}
+      />
     </section>
   );
 }
@@ -99,16 +127,6 @@ export function PipelineListPage({ compact = false }: PipelineListPageProps) {
 function pageFrom(value: string | null): number {
   const page = Number(value);
   return Number.isSafeInteger(page) && page > 0 ? page - 1 : 0;
-}
-
-function StatusBadge({ archived }: { archived: boolean }) {
-  return (
-    <span
-      className={archived ? 'status-badge status-badge--muted' : 'status-badge'}
-    >
-      {archived ? 'Archived' : 'Active'}
-    </span>
-  );
 }
 
 function formatDate(value: string): string {

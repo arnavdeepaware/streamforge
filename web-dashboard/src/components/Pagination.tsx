@@ -11,22 +11,25 @@ export function Pagination({
   return (
     <nav aria-label="Results pagination" className="pagination">
       <button
+        className="button button--secondary"
         disabled={page === 0}
         onClick={() => onPageChange(page - 1)}
         type="button"
       >
-        Previous
+        <ChevronLeft aria-hidden="true" size={17} /> Previous
       </button>
       <span aria-live="polite">
         Page {page + 1} of {totalPages}
       </span>
       <button
+        className="button button--secondary"
         disabled={page + 1 >= totalPages}
         onClick={() => onPageChange(page + 1)}
         type="button"
       >
-        Next
+        Next <ChevronRight aria-hidden="true" size={17} />
       </button>
     </nav>
   );
 }
+import { ChevronLeft, ChevronRight } from 'lucide-react';

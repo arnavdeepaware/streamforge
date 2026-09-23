@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { ArrowLeft, Play, Square } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import {
   controlPlaneClient,
@@ -12,6 +13,7 @@ import {
 } from '../../components/AsyncState';
 import { PageHeader } from '../../components/PageHeader';
 import { PipelineHealthPanel } from './PipelineHealthPanel';
+import { ResourceStatusBadge } from '../../components/StatusBadge';
 
 export function PipelineDetailPage() {
   const { pipelineId = '' } = useParams();
@@ -48,15 +50,28 @@ export function PipelineDetailPage() {
   return (
     <section className="page-content" aria-labelledby="page-title">
       <Link className="back-link" to="/pipelines">
-        Back to pipelines
+        <ArrowLeft aria-hidden="true" size={16} /> Back to pipelines
       </Link>
-      <PageHeader eyebrow="Pipeline definition" title={definition.name}>
+      <PageHeader
+        about={{
+          purpose:
+            'This page combines the saved definition, local run controls, live monitoring, failures, and downloadable artifacts.',
+          prerequisites:
+            'The configured input path must be readable by the local control plane.',
+          outcome:
+            'A terminal run retains its health record, finite output when available, and immutable raw capture.',
+        }}
+        eyebrow="Pipeline definition"
+        title={definition.name}
+      >
         {definition.description || 'No description provided.'}
       </PageHeader>
-      <dl className="detail-list">
+      <dl className="detail-list surface-panel">
         <div>
           <dt>Status</dt>
-          <dd>{definition.archived ? 'Archived' : 'Active'}</dd>
+          <dd>
+            <ResourceStatusBadge archived={definition.archived} />
+          </dd>
         </div>
         <div>
           <dt>Metadata version</dt>
@@ -76,13 +91,18 @@ export function PipelineDetailPage() {
         </div>
       </dl>
       <section aria-labelledby="run-controls-title" className="run-controls">
-        <h3 id="run-controls-title">Local execution</h3>
-        <p>
-          Starts the latest immutable revision through the control-plane local
-          runtime.
-        </p>
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Run controls</p>
+            <h3 id="run-controls-title">Local execution</h3>
+            <p>
+              Start the latest immutable revision through the local runtime.
+            </p>
+          </div>
+        </div>
         <div>
           <button
+            className="button button--primary"
             disabled={
               definition.archived ||
               latestRun.isPending ||
@@ -92,14 +112,17 @@ export function PipelineDetailPage() {
             onClick={() => void startPipeline()}
             type="button"
           >
+            <Play aria-hidden="true" size={17} />
             {actionPending ? 'Working…' : 'Start pipeline'}
           </button>
           {run !== null && isActive(run.state) ? (
             <button
+              className="button button--danger-secondary"
               disabled={actionPending}
               onClick={() => void stopPipeline()}
               type="button"
             >
+              <Square aria-hidden="true" size={16} />
               Stop pipeline
             </button>
           ) : null}
@@ -111,6 +134,12 @@ export function PipelineDetailPage() {
           <p role="alert">Latest run could not be restored.</p>
         ) : null}
         {runError ? <p role="alert">{runError}</p> : null}
+        {run?.failureSummary ? (
+          <div className="notice notice--error" role="alert">
+            <strong>Latest run failed</strong>
+            <p>{run.failureSummary}</p>
+          </div>
+        ) : null}
       </section>
       {run !== null ? (
         <PipelineHealthPanel

@@ -1,5 +1,15 @@
 import { useEffect } from 'react';
 import {
+  Activity,
+  AlertTriangle,
+  Clock3,
+  Download,
+  FileArchive,
+  Gauge,
+  Inbox,
+  Radio,
+} from 'lucide-react';
+import {
   exactIntegerBigInt,
   exactIntegerText,
   pipelineOutputDownloadUrl,
@@ -9,6 +19,7 @@ import {
   type PipelineRunState,
 } from '../../api/controlPlaneClient';
 import { usePipelineMonitoring } from './usePipelineMonitoring';
+import { RunStatusBadge } from '../../components/StatusBadge';
 
 export function PipelineHealthPanel({
   pipelineId,
@@ -38,79 +49,157 @@ export function PipelineHealthPanel({
         <div>
           <p className="eyebrow">Live local run</p>
           <h3 id="pipeline-health-title">Pipeline health</h3>
+          <p>
+            Follow lifecycle, throughput, latency, data quality, and retained
+            run artifacts.
+          </p>
         </div>
         <p aria-live="polite" className="connection-state">
+          <Radio aria-hidden="true" size={14} />
           {monitoring.connection === 'reconnecting'
             ? 'Reconnecting to metrics…'
             : `Metrics ${monitoring.connection}`}
         </p>
       </div>
+      <details className="about-disclosure about-disclosure--compact">
+        <summary>How to read these metrics</summary>
+        <p>
+          Counters show how records move through the pipeline. Sequence gaps and
+          duplicates indicate source-order anomalies; dead letters explain
+          records that could not complete processing.
+        </p>
+      </details>
       <dl className="health-summary">
-        <Metric label="Lifecycle" value={state} />
+        <div className="metric-card metric-card--state">
+          <dt>Lifecycle</dt>
+          <dd>
+            <RunStatusBadge state={state} />
+          </dd>
+        </div>
         <Metric
+          icon={Gauge}
           label="Event rate"
           value={`${snapshot?.eventRatePerSecond ?? 0} events/s`}
         />
         <Metric
+          icon={Clock3}
           label="Latency"
           value={formatNanos(snapshot?.latency.averageNanos ?? 0)}
         />
         <Metric
+          icon={Activity}
           label="Timed events"
           value={exactIntegerText(snapshot?.latency.processedEvents ?? 0)}
         />
         <Metric
+          icon={Inbox}
           label="Queue depth"
           value={exactIntegerText(snapshot?.queueDepth ?? 0)}
         />
         <Metric
+          icon={AlertTriangle}
           label="Sequence gaps"
           value={exactIntegerText(snapshot?.sequenceGapCount ?? 0)}
         />
         <Metric
+          icon={AlertTriangle}
           label="Duplicates"
           value={exactIntegerText(snapshot?.duplicateCount ?? 0)}
         />
       </dl>
       {monitoring.error ? <p role="alert">{monitoring.error}</p> : null}
-      <CounterCards
-        counters={
-          snapshot?.counters ?? {
-            received: 0,
-            parsed: 0,
-            emitted: 0,
-            filtered: 0,
-            failed: 0,
+      <section className="health-section" aria-labelledby="throughput-title">
+        <div className="section-heading section-heading--compact">
+          <div>
+            <p className="eyebrow">Record flow</p>
+            <h4 id="throughput-title">Throughput</h4>
+          </div>
+        </div>
+        <CounterCards
+          counters={
+            snapshot?.counters ?? {
+              received: 0,
+              parsed: 0,
+              emitted: 0,
+              filtered: 0,
+              failed: 0,
+            }
           }
-        }
-      />
-      <RateHistory history={snapshot?.history ?? []} />
+        />
+        <RateHistory history={snapshot?.history ?? []} />
+      </section>
       <DeadLetters deadLetters={snapshot?.deadLetters ?? []} />
-      {terminal && snapshot?.outputAvailable === true ? (
-        <a
-          className="download-link"
-          href={pipelineOutputDownloadUrl(pipelineId, run.runId)}
+      {terminal ? (
+        <section
+          className="health-section artifacts"
+          aria-labelledby="artifacts-title"
         >
-          Download finite output
-        </a>
-      ) : null}
-      {terminal && snapshot?.rawCaptureAvailable === true ? (
-        <a
-          className="download-link"
-          download={snapshot.rawCaptureFilename ?? 'raw-input.capture'}
-          href={pipelineRawCaptureDownloadUrl(pipelineId, run.runId)}
-        >
-          Download immutable raw capture
-        </a>
+          <div className="section-heading section-heading--compact">
+            <div>
+              <p className="eyebrow">Retained files</p>
+              <h4 id="artifacts-title">Run artifacts</h4>
+            </div>
+          </div>
+          <p className="section-copy">
+            Download the normalized output and byte-for-byte source capture
+            retained for this run.
+          </p>
+          <div className="artifact-grid">
+            {snapshot?.outputAvailable === true ? (
+              <a
+                aria-label="Download finite output"
+                className="artifact-card"
+                href={pipelineOutputDownloadUrl(pipelineId, run.runId)}
+              >
+                <Download aria-hidden="true" size={20} />
+                <span>
+                  <strong>Finite output</strong>
+                  <small>Normalized pipeline result</small>
+                </span>
+              </a>
+            ) : null}
+            {snapshot?.rawCaptureAvailable === true ? (
+              <a
+                aria-label="Download immutable raw capture"
+                className="artifact-card"
+                download={snapshot.rawCaptureFilename ?? 'raw-input.capture'}
+                href={pipelineRawCaptureDownloadUrl(pipelineId, run.runId)}
+              >
+                <FileArchive aria-hidden="true" size={20} />
+                <span>
+                  <strong>Immutable raw capture</strong>
+                  <small>{snapshot.rawCaptureFilename ?? 'Raw input'}</small>
+                </span>
+              </a>
+            ) : null}
+            {snapshot?.outputAvailable !== true &&
+            snapshot?.rawCaptureAvailable !== true ? (
+              <p className="form-hint">
+                No downloadable artifacts are available.
+              </p>
+            ) : null}
+          </div>
+        </section>
       ) : null}
     </section>
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function Metric({
+  label,
+  value,
+  icon: Icon,
+}: {
+  label: string;
+  value: string;
+  icon?: typeof Activity;
+}) {
   return (
-    <div>
-      <dt>{label}</dt>
+    <div className="metric-card">
+      <dt>
+        {Icon ? <Icon aria-hidden="true" size={15} /> : null}
+        {label}
+      </dt>
       <dd>{value}</dd>
     </div>
   );
@@ -128,13 +217,13 @@ function CounterCards({
   };
 }) {
   return (
-    <div className="counter-grid" aria-label="Pipeline event counters">
+    <dl className="counter-grid" aria-label="Pipeline event counters">
       <Metric label="Received" value={exactIntegerText(counters.received)} />
       <Metric label="Parsed" value={exactIntegerText(counters.parsed)} />
       <Metric label="Emitted" value={exactIntegerText(counters.emitted)} />
       <Metric label="Filtered" value={exactIntegerText(counters.filtered)} />
       <Metric label="Failed" value={exactIntegerText(counters.failed)} />
-    </div>
+    </dl>
   );
 }
 
@@ -171,6 +260,10 @@ function RateHistory({
           />
         ))}
       </div>
+      <div aria-hidden="true" className="rate-history__axis">
+        <span>Earlier</span>
+        <span>Latest · {exactIntegerText(latest)} received</span>
+      </div>
       <p className="form-hint">
         History is capped at 120 metric snapshots; raw events are not retained.
       </p>
@@ -195,8 +288,16 @@ function DeadLetters({
   }[];
 }) {
   return (
-    <section aria-labelledby="dead-letter-title" className="dead-letter-list">
-      <h4 id="dead-letter-title">Recent dead-letter events</h4>
+    <section
+      aria-labelledby="dead-letter-title"
+      className="health-section dead-letter-list"
+    >
+      <div className="section-heading section-heading--compact">
+        <div>
+          <p className="eyebrow">Exceptions</p>
+          <h4 id="dead-letter-title">Recent dead-letter events</h4>
+        </div>
+      </div>
       {deadLetters.length === 0 ? (
         <p>No quarantined records for this run.</p>
       ) : null}

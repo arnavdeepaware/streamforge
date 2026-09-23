@@ -1,4 +1,5 @@
 import { useSearchParams } from 'react-router-dom';
+import { BookOpen, LockKeyhole } from 'lucide-react';
 import { exactIntegerText } from '../../api/controlPlaneClient';
 import { useSchemas } from '../../api/queries';
 import {
@@ -8,6 +9,7 @@ import {
 } from '../../components/AsyncState';
 import { PageHeader } from '../../components/PageHeader';
 import { Pagination } from '../../components/Pagination';
+import { ResourceStatusBadge } from '../../components/StatusBadge';
 
 export function SchemaRegistryPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -29,7 +31,11 @@ export function SchemaRegistryPage() {
   if (schemas.data.items.length === 0) {
     return (
       <section className="page-content" aria-labelledby="page-title">
-        <PageHeader eyebrow="Read-only in v1" title="Schema Registry">
+        <PageHeader
+          about={schemaRegistryHelp}
+          eyebrow="Read-only in v1"
+          title="Schema Registry"
+        >
           Versioned JSON Schema definitions from the control plane. Editing is
           deferred until after v1.
         </PageHeader>
@@ -42,10 +48,30 @@ export function SchemaRegistryPage() {
 
   return (
     <section className="page-content" aria-labelledby="page-title">
-      <PageHeader eyebrow="Read-only in v1" title="Schema Registry">
+      <PageHeader
+        about={schemaRegistryHelp}
+        actions={
+          <span className="read-only-badge">
+            <LockKeyhole aria-hidden="true" size={15} /> Read-only
+          </span>
+        }
+        eyebrow="Canonical contracts"
+        title="Schema Registry"
+      >
         Versioned JSON Schema definitions from the control plane. Editing is
         deferred until after v1.
       </PageHeader>
+      <div className="notice notice--info">
+        <BookOpen aria-hidden="true" size={19} />
+        <div>
+          <strong>How schemas support pipelines</strong>
+          <p>
+            Versioned schemas document the canonical event contracts used by
+            validation and mapping. Editing is intentionally deferred beyond
+            local v1.
+          </p>
+        </div>
+      </div>
       <p aria-live="polite" className="result-summary">
         {exactIntegerText(schemas.data.totalItems)} schema
         {exactIntegerText(schemas.data.totalItems) === '1' ? '' : 's'} available
@@ -55,15 +81,7 @@ export function SchemaRegistryPage() {
           <article className="resource-card" key={schema.id}>
             <div className="resource-card__heading">
               <h3>{schema.name}</h3>
-              <span
-                className={
-                  schema.archived
-                    ? 'status-badge status-badge--muted'
-                    : 'status-badge'
-                }
-              >
-                {schema.archived ? 'Archived' : 'Active'}
-              </span>
+              <ResourceStatusBadge archived={schema.archived} />
             </div>
             <p>{schema.description || 'No description provided.'}</p>
             <dl className="metadata-list">
@@ -89,6 +107,13 @@ export function SchemaRegistryPage() {
     </section>
   );
 }
+
+const schemaRegistryHelp = {
+  purpose:
+    'The registry lists versioned canonical JSON Schema definitions exposed by the control plane.',
+  outcome:
+    'Use schema names and revision metadata to understand the contracts behind validation and field mapping.',
+};
 
 function pageFrom(value: string | null): number {
   const page = Number(value);

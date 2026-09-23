@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { ArrowRight, Braces, Eye, Plus, Trash2 } from 'lucide-react';
 import type { JsonObject, PipelinePreview } from '../../api/controlPlaneClient';
 import {
   controlPlaneClient,
@@ -109,13 +110,33 @@ export function FieldMapperPage() {
     );
   return (
     <section className="page-content mapper" aria-labelledby="page-title">
-      <PageHeader eyebrow="Declarative mapping" title="Field Mapper">
+      <PageHeader
+        about={{
+          purpose:
+            'The mapper builds safe transformation and output-blueprint rules from fields in the canonical event model.',
+          prerequisites:
+            'Choose a canonical source field and a valid dot-separated destination path.',
+          outcome:
+            'The server preview shows the original event, transformed event, and final nested output before a pipeline uses the rules.',
+        }}
+        eyebrow="Declarative mapping"
+        title="Field Mapper"
+      >
         Build transformation and nested JSON output rules from canonical fields.
         The backend executes every preview.
       </PageHeader>
       <div className="mapper-grid">
-        <section className="mapper-panel">
-          <h3>Canonical fields</h3>
+        <section className="mapper-panel mapper-panel--fields">
+          <div className="mapper-panel__heading">
+            <Braces aria-hidden="true" size={19} />
+            <div>
+              <span>Source</span>
+              <h3>Canonical fields</h3>
+            </div>
+          </div>
+          <p className="form-hint">
+            Select the normalized value you want to expose in the output.
+          </p>
           <ul className="field-list">
             {fields.data.map((field) => (
               <li key={field.path}>
@@ -135,8 +156,18 @@ export function FieldMapperPage() {
             ))}
           </ul>
         </section>
-        <section className="mapper-panel">
-          <h3>Map output fields</h3>
+        <section className="mapper-panel mapper-panel--workspace">
+          <div className="mapper-panel__heading">
+            <ArrowRight aria-hidden="true" size={19} />
+            <div>
+              <span>Destination</span>
+              <h3>Map output fields</h3>
+            </div>
+          </div>
+          <div className="selected-field">
+            <span>Selected canonical field</span>
+            <code>{selected}</code>
+          </div>
           <label>
             Destination path
             <input
@@ -171,15 +202,24 @@ export function FieldMapperPage() {
               <option value="TIMESTAMP_ISO_UTC">ISO timestamp</option>
             </select>
           </label>
-          <button onClick={() => addMapping()} type="button">
+          <button
+            className="button button--secondary"
+            onClick={() => addMapping()}
+            type="button"
+          >
+            <Plus aria-hidden="true" size={17} />
             Add mapped field
           </button>
-          <ul>
+          <ul className="mapping-list">
             {mappings.map((mapping, index) => (
               <li key={`${mapping.destination}-${index}`}>
-                {mapping.destination} ← {mapping.source}{' '}
+                <span>
+                  <strong>{mapping.destination}</strong>
+                  <small>from {mapping.source}</small>
+                </span>
                 <button
                   aria-label={`Remove ${mapping.destination}`}
+                  className="icon-button icon-button--danger"
                   onClick={() =>
                     setMappings((current) =>
                       current.filter(
@@ -189,12 +229,12 @@ export function FieldMapperPage() {
                   }
                   type="button"
                 >
-                  Remove
+                  <Trash2 aria-hidden="true" size={16} />
                 </button>
               </li>
             ))}
           </ul>
-          <h3>Constant and filter</h3>
+          <h3 className="mapper-subheading">Constant and filter</h3>
           <label>
             Constant path
             <input
@@ -273,8 +313,14 @@ function PreviewPanel({
   error: string | null;
 }) {
   return (
-    <section className="mapper-panel">
-      <h3>Server preview</h3>
+    <section className="mapper-panel mapper-panel--preview">
+      <div className="mapper-panel__heading">
+        <Eye aria-hidden="true" size={19} />
+        <div>
+          <span>Live result</span>
+          <h3>Server preview</h3>
+        </div>
+      </div>
       {error ? <p role="alert">{error}</p> : null}
       {preview === null ? (
         <p aria-live="polite">Waiting to preview changes…</p>

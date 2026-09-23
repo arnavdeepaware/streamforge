@@ -1,4 +1,12 @@
 import { useReducer, useState, type Dispatch } from 'react';
+import {
+  ArrowLeft,
+  ArrowRight,
+  Download,
+  Save,
+  ShieldCheck,
+  Upload,
+} from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import type {
@@ -154,10 +162,33 @@ export function PipelineCreationPage() {
       className="page-content pipeline-wizard"
       aria-labelledby="page-title"
     >
-      <PageHeader eyebrow="Control plane" title="New Pipeline">
+      <PageHeader
+        about={{
+          purpose:
+            'The guided editor builds a typed, declarative pipeline without executable scripts or schema inference.',
+          prerequisites:
+            'Know the readable local input path, its source identity and venue, and where the finite output should be written.',
+          outcome:
+            'Validation creates an immutable pipeline revision ready for local execution.',
+        }}
+        eyebrow="Control plane"
+        title="New Pipeline"
+      >
         Configure a finite local pipeline using only typed, declarative
         settings.
       </PageHeader>
+      <div className="wizard-progress" aria-live="polite">
+        <span>
+          Step {state.currentStep + 1} of {steps.length}
+        </span>
+        <div aria-hidden="true">
+          <span
+            style={{
+              width: `${((state.currentStep + 1) / steps.length) * 100}%`,
+            }}
+          />
+        </div>
+      </div>
       <WizardSteps
         currentStep={state.currentStep}
         onSelect={(step) => dispatch({ type: 'step', step })}
@@ -168,6 +199,7 @@ export function PipelineCreationPage() {
           Step {state.currentStep + 1} of {steps.length}
         </p>
         <h3 id="wizard-step-title">{currentStep}</h3>
+        <p className="wizard-step-intro">{stepGuidance[currentStep]}</p>
         {currentStep === 'Input type' ? <InputTypeStep /> : null}
         {currentStep === 'Configure input' ? (
           <InputConfigurationStep
@@ -214,22 +246,25 @@ export function PipelineCreationPage() {
       </section>
       <div className="wizard-actions">
         <button
+          className="button button--secondary"
           disabled={state.currentStep === 0}
           onClick={() =>
             dispatch({ type: 'step', step: state.currentStep - 1 })
           }
           type="button"
         >
+          <ArrowLeft aria-hidden="true" size={17} />
           Back
         </button>
         {state.currentStep < steps.length - 1 ? (
           <button
+            className="button button--primary"
             onClick={() =>
               dispatch({ type: 'step', step: state.currentStep + 1 })
             }
             type="button"
           >
-            Continue
+            Continue <ArrowRight aria-hidden="true" size={17} />
           </button>
         ) : null}
       </div>
@@ -388,7 +423,7 @@ function OutputStep({ draft, errors, onChange }: StepFieldsProps) {
     <div className="field-grid">
       <fieldset>
         <legend>Output type</legend>
-        <label>
+        <label className="output-choice">
           <input
             aria-label="JSON Lines output"
             checked={draft.outputType === 'JSONL'}
@@ -398,7 +433,7 @@ function OutputStep({ draft, errors, onChange }: StepFieldsProps) {
           />{' '}
           JSON Lines
         </label>
-        <label>
+        <label className="output-choice">
           <input
             aria-label="Parquet output"
             checked={draft.outputType === 'PARQUET'}
@@ -487,6 +522,7 @@ function ReviewStep(props: ReviewStepProps) {
       </p>
       <pre aria-label="Pipeline configuration preview">{exported}</pre>
       <button onClick={() => downloadConfiguration(exported)} type="button">
+        <Download aria-hidden="true" size={17} />
         Download JSON configuration
       </button>
       <label className="textarea-field" htmlFor="pipeline-import">
@@ -504,6 +540,7 @@ function ReviewStep(props: ReviewStepProps) {
         </p>
       ) : null}
       <button onClick={props.onImport} type="button">
+        <Upload aria-hidden="true" size={17} />
         Import JSON
       </button>
       <ValidationSummary
@@ -515,6 +552,7 @@ function ReviewStep(props: ReviewStepProps) {
         onClick={props.onValidate}
         type="button"
       >
+        <ShieldCheck aria-hidden="true" size={17} />
         {props.validating ? 'Validating…' : 'Validate configuration'}
       </button>
     </div>
@@ -558,6 +596,7 @@ function SaveStep({
         </p>
       ) : null}
       <button disabled={saving} onClick={onSave} type="button">
+        <Save aria-hidden="true" size={17} />
         {saving ? 'Saving…' : 'Save pipeline definition'}
       </button>
     </div>
@@ -594,6 +633,22 @@ function ValidationSummary({
     </div>
   );
 }
+
+const stepGuidance: Record<(typeof steps)[number], string> = {
+  'Input type': 'Choose the format StreamForge will capture and normalize.',
+  'Configure input':
+    'Identify the local file and the source metadata attached to each canonical event.',
+  Transformations:
+    'Apply a safe, typed operation before shaping the final output.',
+  'Output blueprint':
+    'Choose which canonical values become the nested output document.',
+  'Output sink':
+    'Select the finite file format, location, and exact schema options.',
+  'Validate and review':
+    'Inspect or import the generated configuration, then ask the control plane to validate it.',
+  'Save pipeline':
+    'Give the validated definition a recognizable name and optional description.',
+};
 
 function reducer(state: WizardState, action: WizardAction): WizardState {
   switch (action.type) {

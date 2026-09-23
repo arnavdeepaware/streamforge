@@ -5,6 +5,7 @@ import { PipelineListPage } from './features/pipelines/PipelineListPage';
 import { PipelineCreationPage } from './features/pipeline-creation/PipelineCreationPage';
 import { FieldMapperPage } from './features/pipeline-mapper/FieldMapperPage';
 import { SchemaRegistryPage } from './features/schemas/SchemaRegistryPage';
+import { DashboardPage } from './features/dashboard/DashboardPage';
 import { RouteErrorPage } from './routes/RouteErrorPage';
 
 const routes: RouteObject[] = [
@@ -14,7 +15,7 @@ const routes: RouteObject[] = [
     errorElement: <RouteErrorPage />,
     children: [
       { index: true, element: <Navigate to="dashboard" replace /> },
-      { path: 'dashboard', element: <PipelineListPage compact /> },
+      { path: 'dashboard', element: <DashboardPage /> },
       { path: 'pipelines', element: <PipelineListPage /> },
       {
         path: 'pipelines/new',

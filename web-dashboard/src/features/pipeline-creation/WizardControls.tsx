@@ -15,15 +15,20 @@ export function WizardSteps({
         <li key={step}>
           <button
             aria-current={index === currentStep ? 'step' : undefined}
-            className={
-              index === currentStep
-                ? 'wizard-step wizard-step--current'
-                : 'wizard-step'
-            }
+            className={`wizard-step${index === currentStep ? ' wizard-step--current' : ''}${index < currentStep ? ' wizard-step--complete' : ''}`}
             onClick={() => onSelect(index)}
             type="button"
           >
-            <span>{index + 1}</span>
+            <span>
+              {index < currentStep ? (
+                <>
+                  <span className="visually-hidden">{index + 1}</span>
+                  <Check aria-hidden="true" size={13} />
+                </>
+              ) : (
+                index + 1
+              )}
+            </span>
             {step}
           </button>
         </li>
@@ -39,6 +44,7 @@ type TextFieldProps = {
   onChange: (value: string) => void;
   error?: string;
   inputMode?: 'numeric';
+  requirement?: 'required' | 'optional';
 };
 
 export function TextField({
@@ -48,17 +54,25 @@ export function TextField({
   onChange,
   error,
   inputMode,
+  requirement = 'required',
 }: TextFieldProps) {
   const errorId = `${name}-error`;
   return (
     <div className="text-field">
-      <label htmlFor={name}>{label}</label>
+      <label htmlFor={name}>
+        {label}{' '}
+        <span aria-hidden="true" className="field-requirement">
+          {requirement}
+        </span>
+      </label>
       <input
+        aria-label={label}
         aria-describedby={error ? errorId : undefined}
         aria-invalid={error ? true : undefined}
         id={name}
         inputMode={inputMode}
         onChange={(event) => onChange(event.target.value)}
+        required={requirement === 'required'}
         value={value}
       />
       <FieldError id={errorId} message={error} />
@@ -73,3 +87,4 @@ export function FieldError({ id, message }: { id: string; message?: string }) {
     </span>
   ) : null;
 }
+import { Check } from 'lucide-react';

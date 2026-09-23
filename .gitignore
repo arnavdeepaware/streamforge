@@ -19,6 +19,8 @@ target/
 node_modules/
 dist/
 coverage/
+playwright-report/
+test-results/
 
 # Logs and temporary files
 *.log
